@@ -611,6 +611,7 @@ model Employee {
   advances                 HR_EmployeeAdvance[] @relation("EmployeeAdvances")
   leaveReplacements        HR_EmployeeLeave[] @relation("LeaveReplacements")
   leaves                   HR_EmployeeLeave[] @relation("EmployeeLeaves")
+  missions                 HR_EmployeeMission[] @relation("EmployeeMissions")
   leaveAllowances          HR_LeaveAllowance[] @relation("EmployeeAllowances")
   payrolls                 HR_MonthlyPayroll[] @relation("EmployeePayrolls")
   rotations                HR_WorkRotation[]   @relation("EmployeeRotations")
@@ -713,26 +714,40 @@ model HR_WorkRotation {
 }
 
 model HR_EmployeeLeave {
-  id              Int           @id @default(autoincrement())
-  employeeId      Int
-  leaveType       String
-  startDate       DateTime
-  endDate         DateTime
-  totalDays       Int
-  reason          String?
-  status          GeneralStatus @default(PENDING)
-  replacementId   Int?
-  approvedBy      Int?
-  approvedAt      DateTime?
-  rejectionReason String?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  replacement     Employee?     @relation("LeaveReplacements", fields: [replacementId], references: [id])
-  employee        Employee      @relation("EmployeeLeaves", fields: [employeeId], references: [id], onDelete: Cascade)
+  id                 Int           @id @default(autoincrement())
+  leaveNumber        String        @unique
+  employeeId         Int
+  leaveType          LeaveType     @default(REGULAR)
+  startDate          DateTime
+  endDate            DateTime
+  totalDays          Int
+  reason             String?
+  status             GeneralStatus @default(PENDING)
+  isActive           Boolean       @default(true)
+  actualReturnDate   DateTime?
+  delayDays          Int           @default(0)
+  isPostponed        Boolean       @default(false)
+  postponedTimes     Int           @default(0)
+  allowanceAmount    Float?
+  allowanceSettled   Boolean       @default(false)
+  medicalReportPath  String?
+  affectsNextLeave   Boolean       @default(true)
+  replacementId      Int?
+  approvedBy         Int?
+  approvedAt         DateTime?
+  rejectionReason    String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  replacement        Employee?     @relation("LeaveReplacements", fields: [replacementId], references: [id])
+  employee           Employee      @relation("EmployeeLeaves", fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@index([employeeId])
+  @@index([leaveNumber])
+  @@index([leaveType])
   @@index([status])
+  @@index([isActive])
   @@index([startDate, endDate])
+  @@index([employeeId, isActive])
 }
 
 model HR_EmployeeAdvance {
@@ -1442,6 +1457,41 @@ enum LeaveType {
   SICK
   EMERGENCY
   UNPAID
+}
+
+enum MissionType {
+  TASK_EXECUTION
+  EXTERNAL_WORK
+}
+
+model HR_EmployeeMission {
+  id              Int           @id @default(autoincrement())
+  missionNumber   String        @unique
+  employeeId      Int
+  missionType     MissionType   @default(TASK_EXECUTION)
+  startDate       DateTime
+  endDate         DateTime
+  totalDays       Int
+  location        String
+  purpose         String
+  allowanceAmount Float?        @default(0)
+  status          GeneralStatus @default(PENDING)
+  isActive        Boolean       @default(true)
+  actualReturnDate DateTime?
+  notes           String?
+  approvedBy      Int?
+  approvedAt      DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  employee        Employee      @relation("EmployeeMissions", fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@index([missionNumber])
+  @@index([missionType])
+  @@index([status])
+  @@index([isActive])
+  @@index([startDate, endDate])
+  @@index([employeeId, isActive])
 }
 
 model HR_LeaveAllowance {
