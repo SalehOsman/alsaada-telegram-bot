@@ -3,84 +3,88 @@ import { Composer, InlineKeyboard } from 'grammy'
 
 export const leavesHandler = new Composer<Context>()
 
-// تسجيل إجازة جديدة
-leavesHandler.callbackQuery('leaves:add', async (ctx) => {
-  await ctx.answerCallbackQuery()
-  await ctx.editMessageText(
-    '⏳ جاري تحميل قائمة العاملين...',
-    { parse_mode: 'Markdown' }
-  )
-  // سيتم التنفيذ في leaves-add.handler.ts
-})
-
 // قائمة الإجازات
 leavesHandler.callbackQuery('leaves:list', async (ctx) => {
   await ctx.answerCallbackQuery()
   await ctx.editMessageText(
-    '⏳ جاري تحميل قائمة الإجازات...',
-    { parse_mode: 'Markdown' }
+    '📋 **قائمة الإجازات**\n\n⏳ الوظيفة قيد التطوير...',
+    { 
+      parse_mode: 'Markdown',
+      reply_markup: new InlineKeyboard().text('⬅️ رجوع', 'leavesHandler')
+    }
   )
-  // سيتم التنفيذ في leaves-list.handler.ts
 })
 
 // تسجيل عودة
 leavesHandler.callbackQuery('leaves:return', async (ctx) => {
   await ctx.answerCallbackQuery()
   await ctx.editMessageText(
-    '⏳ جاري تحميل الإجازات النشطة...',
-    { parse_mode: 'Markdown' }
+    '↩️ **تسجيل عودة من إجازة**\n\n⏳ الوظيفة قيد التطوير...',
+    { 
+      parse_mode: 'Markdown',
+      reply_markup: new InlineKeyboard().text('⬅️ رجوع', 'leavesHandler')
+    }
   )
-  // سيتم التنفيذ في leaves-return.handler.ts
 })
 
 // جدول أدوار الإجازات
 leavesHandler.callbackQuery('leaves:schedule', async (ctx) => {
   await ctx.answerCallbackQuery()
   await ctx.editMessageText(
-    '⏳ جاري تحميل جدول الأدوار...',
-    { parse_mode: 'Markdown' }
+    '🔄 **جدول أدوار الإجازات**\n\n⏳ الوظيفة قيد التطوير...',
+    { 
+      parse_mode: 'Markdown',
+      reply_markup: new InlineKeyboard().text('⬅️ رجوع', 'leavesHandler')
+    }
   )
-  // سيتم التنفيذ في leaves-schedule.handler.ts
 })
 
 // عرض إجازات عامل
 leavesHandler.callbackQuery('leaves:employee', async (ctx) => {
   await ctx.answerCallbackQuery()
   await ctx.editMessageText(
-    '⏳ جاري تحميل قائمة العاملين...',
-    { parse_mode: 'Markdown' }
+    '👤 **عرض إجازات عامل**\n\n⏳ الوظيفة قيد التطوير...',
+    { 
+      parse_mode: 'Markdown',
+      reply_markup: new InlineKeyboard().text('⬅️ رجوع', 'leavesHandler')
+    }
   )
-  // سيتم التنفيذ في leaves-employee.handler.ts
 })
 
 // تأجيل إجازة
 leavesHandler.callbackQuery('leaves:postpone', async (ctx) => {
   await ctx.answerCallbackQuery()
   await ctx.editMessageText(
-    '⏳ جاري تحميل قائمة العاملين...',
-    { parse_mode: 'Markdown' }
+    '⏸️ **تأجيل إجازة**\n\n⏳ الوظيفة قيد التطوير...',
+    { 
+      parse_mode: 'Markdown',
+      reply_markup: new InlineKeyboard().text('⬅️ رجوع', 'leavesHandler')
+    }
   )
-  // سيتم التنفيذ في leaves-postpone.handler.ts
 })
 
 // صرف بدل إجازة
 leavesHandler.callbackQuery('leaves:allowance', async (ctx) => {
   await ctx.answerCallbackQuery()
   await ctx.editMessageText(
-    '⏳ جاري تحميل قائمة العاملين...',
-    { parse_mode: 'Markdown' }
+    '💰 **صرف بدل إجازة**\n\n⏳ الوظيفة قيد التطوير...',
+    { 
+      parse_mode: 'Markdown',
+      reply_markup: new InlineKeyboard().text('⬅️ رجوع', 'leavesHandler')
+    }
   )
-  // سيتم التنفيذ في leaves-allowance.handler.ts
 })
 
 // المأموريات
 leavesHandler.callbackQuery('missions:main', async (ctx) => {
   await ctx.answerCallbackQuery()
   await ctx.editMessageText(
-    '⏳ جاري تحميل قائمة المأموريات...',
-    { parse_mode: 'Markdown' }
+    '✈️ **المأموريات**\n\n⏳ الوظيفة قيد التطوير...',
+    { 
+      parse_mode: 'Markdown',
+      reply_markup: new InlineKeyboard().text('⬅️ رجوع', 'leavesHandler')
+    }
   )
-  // سيتم التنفيذ في missions.handler.ts
 })
 
 // Pattern من handler name (MenuBuilder يستخدمه)
