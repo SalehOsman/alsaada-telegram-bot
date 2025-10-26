@@ -6,7 +6,7 @@ import { InlineKeyboard } from 'grammy'
 import { Database } from '#root/modules/database/index.js'
 
 type Employee = Awaited<ReturnType<typeof Database.prisma.employee.findMany>>[0]
-type Position = Awaited<ReturnType<typeof Database.prisma.position.findUnique>>
+type Position = Awaited<ReturnType<typeof Database.prisma.position.findUnique>> & { titleAr?: string }
 type Department = Awaited<ReturnType<typeof Database.prisma.department.findUnique>>
 
 export interface EmployeeSelectorOptions {
@@ -45,7 +45,7 @@ export class EmployeeSelector {
 
     // عرض العاملين (عمود واحد - 20 صف)
     for (const emp of pageEmployees) {
-      const label = `${emp.nickname || emp.fullName} (${emp.position?.name || 'غير محدد'})`
+      const label = `${emp.nickname || emp.fullName} (${emp.position?.titleAr || 'غير محدد'})`
       keyboard.text(label, `${options.callbackPrefix}:${emp.id}`).row()
     }
 

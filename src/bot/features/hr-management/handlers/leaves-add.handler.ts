@@ -461,6 +461,17 @@ leavesAddHandler.callbackQuery(/^leaves:add:save:(\d+)$/, async (ctx) => {
     // توليد رقم الإجازة
     const leaveNumber = await LeaveScheduleService.generateLeaveNumber()
 
+    // جلب بيانات العامل الكاملة
+    const employee = await prisma.employee.findUnique({
+      where: { id: employeeId },
+      include: {
+        position: true,
+        department: true,
+      },
+    })
+
+    if (!employee) return
+
     // حفظ الإجازة
     const leave = await prisma.hR_EmployeeLeave.create({
       data: {
@@ -488,8 +499,59 @@ leavesAddHandler.callbackQuery(/^leaves:add:save:(\d+)$/, async (ctx) => {
     // حساب موعد الإجازة القادمة
     await LeaveScheduleService.updateNextLeaveDate(employeeId)
 
+    // جلب بيانات المسجل
+    const admin = await prisma.user.findUnique({
+      where: { telegramId: BigInt(userId) },
+    })
+
     // مسح البيانات المؤقتة
     formData.delete(userId)
+
+    // تنسيق التواريخ مع اليوم
+    const startDateFormatted = formatDateWithDay(startDate)
+    const endDateFormatted = formatDateWithDay(endDate)
+    const registrationDate = formatDateWithDay(new Date())
+
+    const leaveTypeLabels: Record<string, string> = {
+      REGULAR: 'اعتيادية',
+      SICK: 'مرضية',
+      EMERGENCY: 'عارضة',
+      UNPAID: 'بدون مرتب',
+    }
+
+    // إنشاء التقرير الكامل
+    let report = `✅ **تم تسجيل الإجازة بنجاح!**\n\n`
+    report += `━━━━━━━━━━━━━━━━━━━━\n`
+    report += `📋 **تقرير الإجازة**\n`
+    report += `━━━━━━━━━━━━━━━━━━━━\n\n`
+    
+    // بيانات العامل
+    report += `👤 **العامل:** ${employee.fullName}`
+    if (employee.nickname) {
+      report += ` (${employee.nickname})`
+    }
+    report += `\n`
+    report += `🔢 **كود العامل:** ${employee.employeeCode}\n`
+    report += `💼 **الوظيفة:** ${employee.position?.titleAr || 'غير محدد'}\n`
+    report += `🏢 **القسم:** ${employee.department?.name || 'غير محدد'}\n\n`
+    
+    // بيانات الإجازة
+    report += `━━━━━━━━━━━━━━━━━━━━\n`
+    report += `📋 **رقم الإجازة:** ${leaveNumber}\n`
+    report += `📂 **نوع الإجازة:** ${leaveTypeLabels[data.leaveType]}\n`
+    report += `📅 **من:** ${startDateFormatted}\n`
+    report += `📅 **إلى:** ${endDateFormatted}\n`
+    report += `⏱️ **المدة:** ${totalDays} أيام\n`
+    
+    if (data.notes) {
+      report += `\n💬 **ملاحظات:**\n${data.notes}\n`
+    }
+    
+    // بيانات التسجيل
+    report += `\n━━━━━━━━━━━━━━━━━━━━\n`
+    report += `👨‍💼 **مسجل الإجازة:** ${admin?.fullName || 'غير معروف'}\n`
+    report += `📅 **تاريخ التسجيل:** ${registrationDate}\n`
+    report += `━━━━━━━━━━━━━━━━━━━━`
 
     const keyboard = new InlineKeyboard()
       .text('📝 تسجيل إجازة أخرى', 'leaves:add')
@@ -498,17 +560,10 @@ leavesAddHandler.callbackQuery(/^leaves:add:save:(\d+)$/, async (ctx) => {
       .row()
       .text('🏠 القائمة الرئيسية', 'leavesHandler')
 
-    await ctx.editMessageText(
-      `✅ **تم تسجيل الإجازة بنجاح!**\n\n`
-      + `📋 **رقم الإجازة:** ${leaveNumber}\n`
-      + `📅 **من:** ${Calendar.formatArabic(startDate)}\n`
-      + `📅 **إلى:** ${Calendar.formatArabic(endDate)}\n`
-      + `⏱️ **المدة:** ${totalDays} أيام`,
-      {
-        parse_mode: 'Markdown',
-        reply_markup: keyboard,
-      }
-    )
+    await ctx.editMessageText(report, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard,
+    })
   }
   catch (error) {
     console.error('Error saving leave:', error)
@@ -527,4 +582,12 @@ function formatDateForCallback(date: Date): string {
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
+}
+
+// دالة لتنسيق التاريخ مع اليوم
+function formatDateWithDay(date: Date): string {
+  const days = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت']
+  const dayName = days[date.getDay()]
+  const formatted = Calendar.formatArabic(date)
+  return `${dayName} ${formatted}`
 }
