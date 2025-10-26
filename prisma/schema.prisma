@@ -582,6 +582,12 @@ model Employee {
   lastLeaveEndDate         DateTime?
   nextLeaveStartDate       DateTime?
   nextLeaveEndDate         DateTime?
+  isOnLeave                Boolean           @default(false)
+  isOnMission              Boolean           @default(false)
+  currentLeaveId           Int?
+  currentMissionId         Int?
+  totalLeaveDays           Int               @default(0)
+  totalDelayDays           Int               @default(0)
   fingerprintId            String?
   notes                    String?
   isActive                 Boolean           @default(true)
@@ -605,6 +611,7 @@ model Employee {
   advances                 HR_EmployeeAdvance[] @relation("EmployeeAdvances")
   leaveReplacements        HR_EmployeeLeave[] @relation("LeaveReplacements")
   leaves                   HR_EmployeeLeave[] @relation("EmployeeLeaves")
+  leaveAllowances          HR_LeaveAllowance[] @relation("EmployeeAllowances")
   payrolls                 HR_MonthlyPayroll[] @relation("EmployeePayrolls")
   rotations                HR_WorkRotation[]   @relation("EmployeeRotations")
 
@@ -1428,4 +1435,26 @@ enum ShiftStatus {
   COMPLETED
   CANCELLED
   NO_SHOW
+}
+
+enum LeaveType {
+  REGULAR
+  SICK
+  EMERGENCY
+  UNPAID
+}
+
+model HR_LeaveAllowance {
+  id         Int      @id @default(autoincrement())
+  employeeId Int
+  amount     Float
+  reason     String
+  isSettled  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  employee   Employee @relation("EmployeeAllowances", fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@index([isSettled])
+  @@index([createdAt])
 }
