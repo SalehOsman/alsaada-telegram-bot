@@ -4,7 +4,7 @@ import path from 'node:path'
 import { Composer, InlineKeyboard } from 'grammy'
 import { Database } from '../../../../modules/database/index.js'
 import { isPositiveNumber, isValidName, validateEgyptPhoneWithInfo, validateNationalIDWithInfo } from '../../../../modules/input/validators/index.js'
-import { createSimpleDatePicker, parseDateFromCallback } from '../../../../modules/ui/calendar.js'
+import { Calendar } from '../../../../modules/ui/calendar.js'
 import { AttachmentsManager } from '../../../../modules/utils/attachments-manager.js'
 import { EmployeeCodeManager } from '../../../../modules/utils/employee-code-manager.js'
 import { generateNickname, isValidNickname } from '../../../../modules/utils/nickname-generator.js'
@@ -559,10 +559,9 @@ addEmployeeHandler.callbackQuery(/^select:governorate:(\d+)$/, async (ctx) => {
     formData.set(userId, data)
 
     // استخدام التقويم الجديد
-    const keyboard = createSimpleDatePicker(
-      'hr:employee:add:startDate',
-      'hr:employee:add:governorate',
-    )
+    const keyboard = Calendar.create({
+      callbackPrefix: 'hr:employee:add:startDate',
+    })
 
     await ctx.reply(
       `✅ **تم اختيار المحافظة:** ${governorate.nameAr}\n\n`
@@ -594,7 +593,7 @@ addEmployeeHandler.callbackQuery(/^hr:employee:add:startDate:(.+)$/, async (ctx)
     return
 
   const dateStr = ctx.match[1]
-  const selectedDate = parseDateFromCallback(dateStr)
+  const selectedDate = Calendar.parseDate(dateStr)
 
   if (!selectedDate) {
     await ctx.reply('❌ التاريخ غير صحيح. يرجى المحاولة مرة أخرى.')

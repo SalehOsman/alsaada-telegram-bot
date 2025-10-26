@@ -2,14 +2,13 @@ import type { Context } from '../../../context.js'
 import { Role, Gender, MaritalStatus, EmploymentType, ContractType, EmploymentStatus, PaymentMethod, TransferType } from '../../../../../generated/prisma/index.js'
 import { Composer, InlineKeyboard } from 'grammy'
 import { Database } from '../../../../modules/database/index.js'
-import { createSimpleDatePicker, parseDateFromCallback } from '../../../../modules/ui/calendar.js'
+import { Calendar } from '../../../../modules/ui/calendar.js'
 
-// دالة إنشاء تقويم بسيط لاختيار التاريخ - تم استبدالها بالتقويم العام
+// دالة إنشاء تقويم بسيط لاختيار التاريخ
 function createDatePickerKeyboard(employeeId: number): InlineKeyboard {
-  return createSimpleDatePicker(
-    `hr:employee:status:date:${employeeId}`,
-    `hr:employee:edit:${employeeId}`
-  )
+  return Calendar.create({
+    callbackPrefix: `hr:employee:status:date:${employeeId}`
+  })
 }
 
 export const employeeEditHandler = new Composer<Context>()
@@ -1339,7 +1338,7 @@ employeeEditHandler.callbackQuery(/^hr:employee:status:date:(\d+):(\d{4}-\d{2}-\
 
   try {
     // تحليل التاريخ من الصيغة YYYY-MM-DD باستخدام التقويم الجديد
-    const parsedDate = parseDateFromCallback(dateStr)
+    const parsedDate = Calendar.parseDate(dateStr)
     
     if (!parsedDate) {
       throw new Error('تاريخ غير صحيح')

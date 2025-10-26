@@ -3,7 +3,11 @@
  */
 
 import { InlineKeyboard } from 'grammy'
-import type { Employee, Position, Department } from '@prisma/client'
+import { Database } from '#root/modules/database/index.js'
+
+type Employee = Awaited<ReturnType<typeof Database.prisma.employee.findMany>>[0]
+type Position = Awaited<ReturnType<typeof Database.prisma.position.findUnique>>
+type Department = Awaited<ReturnType<typeof Database.prisma.department.findUnique>>
 
 export interface EmployeeSelectorOptions {
   /** قائمة العاملين */

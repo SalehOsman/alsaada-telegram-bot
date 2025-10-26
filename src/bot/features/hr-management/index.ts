@@ -31,6 +31,7 @@ import { employeePreviousFilterResultsHandler } from './handlers/employee-previo
 // Import main handler
 import { hrMainHandler } from './handlers/hr-main.handler.js'
 import { leavesHandler } from './handlers/leaves.handler.js'
+import { leavesAddHandler } from './handlers/leaves-add.handler.js'
 import { payrollHandler } from './handlers/payroll.handler.js'
 
 export const composer = new Composer<Context>()
@@ -42,6 +43,7 @@ composer.use(hrMainHandler)
 composer.use(employeesListHandler)
 composer.use(advancesHandler)
 composer.use(leavesHandler)
+composer.use(leavesAddHandler)
 composer.use(payrollHandler)
 composer.use(customReportsHandler)
 composer.use(customReportsEmployeeHandler)
