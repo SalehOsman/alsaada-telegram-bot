@@ -34,7 +34,7 @@ export class EmployeeSelector {
     message: string
     hasMore: boolean
   } {
-    const pageSize = options.pageSize || 10
+    const pageSize = options.pageSize || 20
     const start = options.page * pageSize
     const end = start + pageSize
     const pageEmployees = options.employees.slice(start, end)
@@ -43,19 +43,10 @@ export class EmployeeSelector {
 
     const keyboard = new InlineKeyboard()
 
-    // عرض العاملين (2 في كل صف)
-    for (let i = 0; i < pageEmployees.length; i += 2) {
-      const emp1 = pageEmployees[i]
-      const label1 = `👤 ${emp1.nickname || emp1.fullName}`
-      keyboard.text(label1, `${options.callbackPrefix}:${emp1.id}`)
-
-      if (i + 1 < pageEmployees.length) {
-        const emp2 = pageEmployees[i + 1]
-        const label2 = `👤 ${emp2.nickname || emp2.fullName}`
-        keyboard.text(label2, `${options.callbackPrefix}:${emp2.id}`)
-      }
-
-      keyboard.row()
+    // عرض العاملين (عمود واحد - 20 صف)
+    for (const emp of pageEmployees) {
+      const label = `${emp.nickname || emp.fullName} (${emp.position?.name || 'غير محدد'})`
+      keyboard.text(label, `${options.callbackPrefix}:${emp.id}`).row()
     }
 
     // أزرار التنقل

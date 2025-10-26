@@ -24,25 +24,31 @@ export class Calendar {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
 
-    // عرض 7 أيام من اليوم
+    // عرض 7 أيام: 3 سابقة + اليوم + 3 تالية
     const dates: Date[] = []
-    for (let i = 0; i < 7; i++) {
+    for (let i = -3; i <= 3; i++) {
       const date = new Date(today)
       date.setDate(date.getDate() + i)
       dates.push(date)
     }
 
-    // صف واحد: 3 أيام
+    // صف أول: 3 أيام سابقة
     for (let i = 0; i < 3; i++) {
       const date = dates[i]
-      const label = this.formatDateButton(date, i === 0)
+      const label = this.formatDateButton(date, false)
       const callback = `${options.callbackPrefix}:${this.formatDateValue(date)}`
       keyboard.text(label, callback)
     }
     keyboard.row()
 
-    // صف ثاني: 4 أيام
-    for (let i = 3; i < 7; i++) {
+    // صف ثاني: اليوم
+    const todayDate = dates[3]
+    const todayLabel = this.formatDateButton(todayDate, true)
+    const todayCallback = `${options.callbackPrefix}:${this.formatDateValue(todayDate)}`
+    keyboard.text(todayLabel, todayCallback).row()
+
+    // صف ثالث: 3 أيام تالية
+    for (let i = 4; i < 7; i++) {
       const date = dates[i]
       const label = this.formatDateButton(date, false)
       const callback = `${options.callbackPrefix}:${this.formatDateValue(date)}`

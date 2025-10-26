@@ -3,6 +3,7 @@ import { governorates } from './seeds/governorates';
 import { equipmentCategories, equipmentTypes, defaultShifts } from './seeds/equipment-data';
 import { departments } from './seeds/departments';
 import { positionsData } from './seeds/positions';
+import { seedEmployeesWithLeaves } from './seeds/employees-leaves';
 
 const prisma = new PrismaClient();
 
@@ -163,9 +164,10 @@ async function main() {
   
   // تشغيل seed بالترتيب الصحيح
   await seedGovernorates();
-  await seedDepartments();     // جديد
-  await seedPositions();        // جديد
+  await seedDepartments();
+  await seedPositions();
   await seedEquipment();
+  await seedEmployeesWithLeaves();
   
   // عرض الملخص النهائي
   console.log('\n' + '='.repeat(50));
@@ -178,6 +180,8 @@ async function main() {
     positions: await prisma.position.count(),
     equipmentCategories: await prisma.equipmentCategory.count(),
     equipmentTypes: await prisma.equipmentType.count(),
+    employees: await prisma.employee.count(),
+    leaves: await prisma.hR_EmployeeLeave.count(),
   };
   
   console.log(`✅ المحافظات: ${counts.governorates}`);
@@ -185,6 +189,8 @@ async function main() {
   console.log(`✅ الوظائف: ${counts.positions}`);
   console.log(`✅ تصنيفات المعدات: ${counts.equipmentCategories}`);
   console.log(`✅ أنواع المعدات: ${counts.equipmentTypes}`);
+  console.log(`✅ العاملين: ${counts.employees}`);
+  console.log(`✅ الإجازات: ${counts.leaves}`);
   console.log('='.repeat(50));
   
   console.log('\n✅ اكتملت عملية Seeding بنجاح!');
