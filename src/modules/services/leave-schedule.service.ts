@@ -20,6 +20,7 @@ export class LeaveScheduleService {
           workDaysPerCycle: true,
           leaveDaysPerCycle: true,
           lastLeaveEndDate: true,
+          hireDate: true,
         },
       })
 
@@ -27,8 +28,9 @@ export class LeaveScheduleService {
         return null
       }
 
-      // تاريخ البداية = آخر إجازة + أيام العمل
-      const baseDate = employee.lastLeaveEndDate || new Date()
+      // تاريخ البداية = آخر إجازة + أيام العمل + 1 (يوم العودة)
+      // إذا لم يحصل على إجازة من قبل، نستخدم تاريخ التعيين
+      const baseDate = employee.lastLeaveEndDate || employee.hireDate
       const startDate = new Date(baseDate)
       startDate.setDate(startDate.getDate() + employee.workDaysPerCycle + 1)
 
@@ -68,18 +70,36 @@ export class LeaveScheduleService {
 
   /**
    * حساب عدد أيام التأخير
+   * التأخير = actualReturnDate - (endDate + 1)
    */
-  static calculateDelayDays(expectedReturnDate: Date, actualReturnDate: Date): number {
-    const expected = new Date(expectedReturnDate)
-    const actual = new Date(actualReturnDate)
+  static calculateDelayDays(leaveEndDate: Date, actualReturnDate: Date): number {
+    const expectedReturn = new Date(leaveEndDate)
+    expectedReturn.setDate(expectedReturn.getDate() + 1) // اليوم التالي للإجازة
+    expectedReturn.setHours(0, 0, 0, 0)
     
-    expected.setHours(0, 0, 0, 0)
+    const actual = new Date(actualReturnDate)
     actual.setHours(0, 0, 0, 0)
 
-    const diffTime = actual.getTime() - expected.getTime()
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    const diffTime = actual.getTime() - expectedReturn.getTime()
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
 
     return diffDays > 0 ? diffDays : 0
+  }
+
+  /**
+   * حساب عدد الأيام بين تاريخين (شامل)
+   */
+  static calculateTotalDays(startDate: Date, endDate: Date): number {
+    const start = new Date(startDate)
+    const end = new Date(endDate)
+    
+    start.setHours(0, 0, 0, 0)
+    end.setHours(0, 0, 0, 0)
+
+    const diffTime = end.getTime() - start.getTime()
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1
+
+    return diffDays > 0 ? diffDays : 1
   }
 
   /**
