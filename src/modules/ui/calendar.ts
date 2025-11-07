@@ -64,11 +64,11 @@ export class Calendar {
   private static formatDateButton(date: Date, isToday: boolean): string {
     const day = date.getDate()
     const month = date.getMonth() + 1
-    
+
     if (isToday) {
       return `📅 ${day}/${month} (اليوم)`
     }
-    
+
     return `${day}/${month}`
   }
 
@@ -87,7 +87,8 @@ export class Calendar {
    */
   static parseDate(dateStr: string): Date {
     const [year, month, day] = dateStr.split('-').map(Number)
-    return new Date(year, month - 1, day)
+    // إنشاء تاريخ UTC بدلاً من التوقيت المحلي لتجنب مشاكل التوقيت
+    return new Date(Date.UTC(year, month - 1, day))
   }
 
   /**

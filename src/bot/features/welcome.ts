@@ -61,6 +61,13 @@ feature.command('start', logHandle('command-start'), async (ctx) => {
     await ctx.reply(ctx.t('welcome'), {
       reply_markup: keyboard,
     })
+
+    // ✅ إشعار السوبر أدمن بالعقوبات المعلقة
+    if (userRole === 'SUPER_ADMIN') {
+      const { PenaltiesNotificationsService } = await import('#root/modules/services/penalties-notifications.service.js')
+      // تمرير ctx فقط - الخدمة ستستخدم ctx.api للإرسال
+      await PenaltiesNotificationsService.notifySuperAdminOnLogin(ctx)
+    }
   }
 })
 
@@ -85,6 +92,8 @@ feature.hears('⚙️ الإعدادات', async (ctx) => {
     .row()
     .text('🔧 إعدادات البوت', 'settings:bot')
     .row()
+    .text('👥 إعدادات المستخدمين', 'settings:users')
+    .row()
     .text('🎯 تفعيل/إيقاف الأقسام', 'settings:features')
     .row()
     .text('📊 التقارير والإحصائيات', 'menu:feature:reports-analytics')
@@ -108,12 +117,127 @@ feature.hears('⚙️ الإعدادات', async (ctx) => {
     .text('🔙 رجوع', 'settings:close')
 
   await ctx.reply(
-    '⚙️ **لوحة الإعدادات**\n\n'
-    + 'اختر القسم الذي تريد تعديله:',
+    '⚙️ **لوحة الإعدادات**\n\n' + 'اختر القسم الذي تريد تعديله:',
     {
       parse_mode: 'Markdown',
       reply_markup: settingsKeyboard,
     },
+  )
+})
+
+// قسم إعدادات المستخدمين (SUPER_ADMIN فقط)
+feature.callbackQuery('settings:users', async (ctx) => {
+  const userRole = ctx.dbUser?.role
+
+  if (userRole !== 'SUPER_ADMIN') {
+    await ctx.answerCallbackQuery({ text: '⛔ هذه الميزة متاحة فقط للمدير الأعلى', show_alert: true })
+    return
+  }
+
+  await ctx.answerCallbackQuery()
+
+  const kb = new InlineKeyboard()
+    .text('📋 قائمة المستخدمين', 'menu:sub:admin-panel:users-list')
+    .row()
+    .text('📝 طلبات الانضمام', 'menu:sub:admin-panel:join-requests')
+    .row()
+    .text('🚫 الحظر وإلغاء الحظر', 'menu:sub:admin-panel:ban-user')
+    .row()
+    .text('🔄 تغيير الأدوار', 'menu:sub:admin-panel:change-role')
+    .row()
+    .text('📜 سجل تغييرات الأعضاء', 'settings:users:audit')
+    .row()
+    .text('🔙 رجوع', 'settings:bot-back')
+
+  await ctx.editMessageText(
+    '👥 **إعدادات المستخدمين**\n\n'
+    + 'تحكم كامل بجميع إعدادات المستخدمين:\n'
+    + '• عرض وإدارة المستخدمين\n'
+    + '• قبول/رفض طلبات الانضمام\n'
+    + '• حظر وإلغاء الحظر\n'
+    + '• تغيير الأدوار\n'
+    + '• عرض سجل التغييرات',
+    { parse_mode: 'Markdown', reply_markup: kb },
+  )
+})
+
+// رجوع من إعدادات المستخدمين إلى لوحة الإعدادات
+feature.callbackQuery('settings:bot-back', async (ctx) => {
+  await ctx.answerCallbackQuery()
+
+  const userRole = ctx.dbUser?.role
+  if (userRole !== 'SUPER_ADMIN') {
+    await ctx.answerCallbackQuery({ text: '⛔ هذه الميزة متاحة فقط للمدير الأعلى', show_alert: true })
+    return
+  }
+
+  const settingsKeyboard = new InlineKeyboard()
+    .text('🏢 بيانات الشركة', 'settings:company')
+    .row()
+    .text('🔧 إعدادات البوت', 'settings:bot')
+    .row()
+    .text('👥 إعدادات المستخدمين', 'settings:users')
+    .row()
+    .text('🎯 تفعيل/إيقاف الأقسام', 'settings:features')
+    .row()
+    .text('📊 التقارير والإحصائيات', 'menu:feature:reports-analytics')
+    .row()
+    .text('📁 إدارة الملفات', 'menu:feature:file-management')
+    .row()
+    .text('🛡️ الأمان والحماية', 'menu:feature:security-management')
+    .row()
+    .text('🔒 إعدادات الأمان', 'settings:security')
+    .row()
+    .text('📊 إعدادات قاعدة البيانات', 'settings:database')
+    .row()
+    .text('📝 إعدادات السجلات', 'settings:logging')
+    .row()
+    .text('🔔 إعدادات الإشعارات', 'settings:notifications')
+    .row()
+    .text('⚡ إعدادات الأداء', 'settings:performance')
+    .row()
+    .text('🌐 إعدادات اللغة', 'settings:language')
+    .row()
+    .text('🔙 رجوع', 'settings:close')
+
+  await ctx.editMessageText(
+    '⚙️ **لوحة الإعدادات**\n\n'
+    + 'اختر القسم الذي تريد تعديله:',
+    { parse_mode: 'Markdown', reply_markup: settingsKeyboard },
+  )
+})
+
+// عرض سجل تغييرات المستخدمين (آخر 10 عمليات)
+feature.callbackQuery('settings:users:audit', async (ctx) => {
+  await ctx.answerCallbackQuery()
+
+  const { Database } = await import('#root/modules/database/index.js')
+  const logs = await Database.prisma.auditLog.findMany({
+    where: { model: 'User' },
+    orderBy: { timestamp: 'desc' },
+    take: 10,
+    include: { changedByUser: { select: { fullName: true, nickname: true, username: true } } },
+  })
+
+  if (!logs.length) {
+    await ctx.editMessageText(
+      '📜 **سجل تغييرات الأعضاء**\n\nلا توجد تغييرات مسجلة مؤخراً.',
+      { parse_mode: 'Markdown', reply_markup: new InlineKeyboard().text('⬅️ رجوع', 'settings:users') },
+    )
+    return
+  }
+
+  const lines = logs.map((l) => {
+    const by = l.changedByUser?.fullName || l.changedByUser?.nickname || l.changedByUser?.username || 'غير معروف'
+    const when = new Date(l.timestamp).toLocaleString('ar-EG')
+    const field = l.fieldName ? `— ${l.fieldName}` : ''
+    const change = l.oldValue || l.newValue ? `\nمن: ${l.oldValue ?? '-'}\nإلى: ${l.newValue ?? '-'}` : ''
+    return `• ${when} — ${by}\n${l.action} ${field}${change}`
+  })
+
+  await ctx.editMessageText(
+    `📜 **سجل تغييرات الأعضاء (آخر 10)**\n\n${lines.join('\n\n')}`,
+    { parse_mode: 'Markdown', reply_markup: new InlineKeyboard().text('⬅️ رجوع', 'settings:users') },
   )
 })
 
@@ -170,8 +294,6 @@ feature.hears('👤 الملف الشخصي', async (ctx) => {
   }
 
   try {
-    const user = await ctx.dbUser // استخدام البيانات المحملة مسبقاً
-
     // بناء رسالة الملف الشخصي
     let message = '👤 <b>الملف الشخصي</b>\n\n'
 
@@ -226,9 +348,10 @@ feature.hears('📋 القائمة الرئيسية', async (ctx) => {
   try {
     // استيراد MenuBuilder و featureRegistry
     const { MenuBuilder } = await import('./registry/menu-builder.js')
-    const { featureRegistry } = await import('./registry/feature-registry.js')
 
-    const keyboard = MenuBuilder.buildMainMenu(userRole as any)
+    const keyboard = await MenuBuilder.buildMainMenu(ctx.dbUser, {
+      maxButtonsPerRow: 1,
+    })
 
     await ctx.reply('📋 **القائمة الرئيسية**\n\nاختر القسم المطلوب:', {
       parse_mode: 'Markdown',
@@ -257,14 +380,20 @@ feature.callbackQuery(/^menu:feature:(.+)$/, async (ctx) => {
       return
 
     const featureId = match[1]
-    const userRole = ctx.dbUser?.role ?? 'GUEST'
+
+    if (!ctx.dbUser) {
+      await ctx.answerCallbackQuery('⛔ ليس لديك صلاحية الوصول')
+      return
+    }
 
     // استيراد featureRegistry
     const { featureRegistry } = await import('./registry/feature-registry.js')
     const { MenuBuilder } = await import('./registry/menu-builder.js')
+    const { PermissionService } = await import('#root/modules/permissions/permission-service.js')
 
-    // Check if user can access this feature
-    if (!featureRegistry.canAccess(featureId, userRole as any)) {
+    // Check if user can access this department using database
+    const canAccess = await PermissionService.canAccessDepartment(ctx.dbUser, featureId)
+    if (!canAccess) {
       await ctx.answerCallbackQuery('⛔ ليس لديك صلاحية الوصول لهذا القسم')
       return
     }
@@ -275,8 +404,14 @@ feature.callbackQuery(/^menu:feature:(.+)$/, async (ctx) => {
       return
     }
 
-    // Build sub-menu
-    const keyboard = MenuBuilder.buildSubMenu(featureId, userRole as any)
+    // Build sub-menu (عرض قسم شئون العاملين بعمود واحد)
+    const keyboard = featureId === 'hr-management'
+      ? await MenuBuilder.buildSubMenu(featureId, ctx.dbUser, {
+        maxButtonsPerRow: 1,
+        showBackButton: true,
+        backButtonText: '⬅️ رجوع للقائمة الرئيسية',
+      })
+      : await MenuBuilder.buildSubMenu(featureId, ctx.dbUser)
     if (!keyboard) {
       await ctx.answerCallbackQuery('⚠️ لا توجد أقسام فرعية متاحة')
       return
@@ -295,24 +430,33 @@ feature.callbackQuery(/^menu:feature:(.+)$/, async (ctx) => {
   }
 })
 
-feature.callbackQuery(/^menu:sub:([^:]+):([^:]+)$/, async (ctx) => {
+feature.callbackQuery(/^menu:sub:([^:]+):([^:]+)$/, async (ctx, next) => {
   try {
-    await ctx.answerCallbackQuery()
-
     const match = ctx.match
     if (!match || !match[1] || !match[2])
       return
 
     const featureId = match[1]
     const subFeatureId = match[2]
-    const userRole = ctx.dbUser?.role ?? 'GUEST'
+
+    if (!ctx.dbUser) {
+      await ctx.answerCallbackQuery('⛔ ليس لديك صلاحية الوصول')
+      return
+    }
 
     // استيراد featureRegistry
     const { featureRegistry } = await import('./registry/feature-registry.js')
     const { MenuBuilder } = await import('./registry/menu-builder.js')
+    const { PermissionService } = await import('#root/modules/permissions/permission-service.js')
 
-    // Check permissions
-    if (!featureRegistry.canAccessSubFeature(featureId, subFeatureId, userRole as any)) {
+    // Build the correct sub-feature code for permission check
+    // Format: "departmentPrefix:subFeatureId" (e.g., "hr:employees-list")
+    const departmentPrefix = featureId.replace('-management', '') // "hr-management" → "hr"
+    const subFeatureCode = `${departmentPrefix}:${subFeatureId}` // "hr:employees-list"
+
+    // Check permissions using database with correct code format
+    const canAccess = await PermissionService.canAccessSubFeature(ctx.dbUser, subFeatureCode)
+    if (!canAccess) {
       await ctx.answerCallbackQuery('⛔ ليس لديك صلاحية الوصول لهذا القسم')
       return
     }
@@ -323,15 +467,25 @@ feature.callbackQuery(/^menu:sub:([^:]+):([^:]+)$/, async (ctx) => {
       return
     }
 
-    // Here you would call the actual handler
-    // For now, just show a message
+    // If this sub-feature has its own handler, let downstream handlers process it
+    if (subFeature.handler) {
+      return next()
+    }
+
+    // Otherwise, show minimal fallback UI
+    await ctx.answerCallbackQuery()
     await ctx.editMessageText(
-      `✅ تم اختيار: ${subFeature.name}\n\n`
-      + `Handler: \`${subFeature.handler}\`\n\n`
-      + `سيتم تنفيذ الوظيفة المرتبطة بهذا القسم.`,
+      `✅ تم اختيار: ${subFeature.name}`,
       {
         parse_mode: 'Markdown',
-        reply_markup: MenuBuilder.buildSubMenu(featureId, userRole as any) || undefined,
+        reply_markup:
+          (featureId === 'hr-management'
+            ? await MenuBuilder.buildSubMenu(featureId, ctx.dbUser, {
+              maxButtonsPerRow: 1,
+              showBackButton: true,
+              backButtonText: '⬅️ رجوع للقائمة الرئيسية',
+            })
+            : await MenuBuilder.buildSubMenu(featureId, ctx.dbUser)) || undefined,
       },
     )
   }
@@ -345,9 +499,15 @@ feature.callbackQuery('menu:back', async (ctx) => {
   try {
     await ctx.answerCallbackQuery()
 
-    const userRole = ctx.dbUser?.role ?? 'GUEST'
+    if (!ctx.dbUser) {
+      await ctx.editMessageText('⛔ يجب عليك تقديم طلب انضمام أولاً.')
+      return
+    }
+
     const { MenuBuilder } = await import('./registry/menu-builder.js')
-    const keyboard = MenuBuilder.buildMainMenu(userRole as any)
+    const keyboard = await MenuBuilder.buildMainMenu(ctx.dbUser, {
+      maxButtonsPerRow: 1,
+    })
 
     await ctx.editMessageText('📋 **القائمة الرئيسية**\n\nاختر القسم المطلوب:', {
       parse_mode: 'Markdown',
@@ -366,29 +526,19 @@ feature.command('greeting', logHandle('command-greeting'), (ctx) => {
 
 // معالج النص لتعديل الملف الشخصي - في generic handler منفصل
 genericTextHandler.on('message:text', async (ctx, next) => {
-  console.log('Welcome text handler called:', {
-    profileEditField: ctx.session.profileEditField,
-    text: ctx.message.text,
-    hasDbUser: !!ctx.dbUser,
-  })
-
   // ⚠️ CRITICAL: دع النماذج النشطة (مثل إضافة موظف) تعالج الرسائل أولاً
   // إذا لم يكن هناك حقل للتعديل، دع الـ handlers الأخرى تعالج الرسالة
   if (!ctx.session.profileEditField) {
-    console.log('No profile edit field, passing to next handler')
     return next()
   }
-  
+
   // التحقق من وجود المستخدم
   if (!ctx.dbUser) {
-    console.log('No dbUser, calling next()')
     return next()
   }
 
   const field = ctx.session.profileEditField
   const newValue = ctx.message.text
-
-  console.log('Processing profile edit:', { field, newValue })
 
   // التحقق من إلغاء العملية
   if (newValue === '/cancel') {

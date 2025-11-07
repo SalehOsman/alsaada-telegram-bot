@@ -13,6 +13,24 @@ export const usersListHandler = new Composer<Context>()
 // تخزين مؤقت لحالة الصفحات
 const userListState = new Map<number, { page: number, filter?: any }>()
 
+// دعم نمط MenuBuilder المباشر بالاسم
+usersListHandler.callbackQuery('usersListHandler', async (ctx) => {
+  try {
+    await ctx.answerCallbackQuery()
+
+    const userId = ctx.from?.id
+    if (!userId)
+      return
+
+    userListState.set(userId, { page: 1 })
+    await showUsersList(ctx, userId, 1)
+  }
+  catch (error) {
+    console.error('Error in usersListHandler:', error)
+    await ctx.answerCallbackQuery('حدث خطأ')
+  }
+})
+
 /**
  * عرض قائمة المستخدمين
  */

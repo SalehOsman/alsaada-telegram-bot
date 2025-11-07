@@ -29,7 +29,7 @@ composer.use(joinRequestsHandler)
 /**
  * Statistics Handler
  */
-composer.callbackQuery(/^menu:sub:admin-panel:statistics$/, async (ctx) => {
+async function showStatistics(ctx: Context) {
   try {
     await ctx.answerCallbackQuery()
 
@@ -61,7 +61,13 @@ composer.callbackQuery(/^menu:sub:admin-panel:statistics$/, async (ctx) => {
     logger.error({ error }, 'Error in statistics handler:')
     await ctx.answerCallbackQuery('حدث خطأ')
   }
-})
+}
+
+// نمط القائمة القياسي
+composer.callbackQuery(/^menu:sub:admin-panel:statistics$/, showStatistics)
+
+// دعم نمط MenuBuilder المباشر بالاسم
+composer.callbackQuery('statisticsHandler', showStatistics)
 
 // Export config
 export { adminPanelConfig as config }

@@ -37,8 +37,22 @@ async function startPolling(config: PollingConfig) {
   await CompanyService.getOrCreate()
   logger.info('Company initialized')
 
+  // Restore feature states from database (MUST be after Database.connect())
+  const { featureLoader } = await import('#root/bot/features/registry/index.js')
+  await featureLoader.restoreFeatureStates()
+
   // Initialize bot
   await bot.init()
+
+  // Initialize Leave Notifications Scheduler
+  const { LeaveNotificationsScheduler, AutoPenaltiesScheduler } = await import('./modules/schedulers/index.js')
+  const leaveScheduler = new LeaveNotificationsScheduler(bot.api)
+  leaveScheduler.start()
+  logger.info('Leave notifications scheduler initialized')
+
+  // Initialize Auto Penalties Scheduler
+  AutoPenaltiesScheduler.start(bot)
+  logger.info('Auto penalties scheduler initialized')
 
   // Try to delete webhook with retry logic
   await deleteWebhookWithRetry(bot.api, logger)
@@ -91,8 +105,22 @@ async function startWebhook(config: WebhookConfig) {
   await CompanyService.getOrCreate()
   logger.info('Company initialized')
 
+  // Restore feature states from database (MUST be after Database.connect())
+  const { featureLoader } = await import('#root/bot/features/registry/index.js')
+  await featureLoader.restoreFeatureStates()
+
   // to prevent receiving updates before the bot is ready
   await bot.init()
+
+  // Initialize Leave Notifications Scheduler
+  const { LeaveNotificationsScheduler, AutoPenaltiesScheduler } = await import('./modules/schedulers/index.js')
+  const leaveScheduler = new LeaveNotificationsScheduler(bot.api)
+  leaveScheduler.start()
+  logger.info('Leave notifications scheduler initialized')
+
+  // Initialize Auto Penalties Scheduler
+  AutoPenaltiesScheduler.start(bot)
+  logger.info('Auto penalties scheduler initialized')
 
   // start server
   const info = await serverManager.start()
@@ -131,16 +159,16 @@ async function deleteWebhookWithRetry(api: any, logger: any, maxRetries = 3) {
         maxRetries,
         error: error.message || error,
       }, `Failed to delete webhook (attempt ${attempt}/${maxRetries})`)
-      
+
       if (attempt === maxRetries) {
         logger.error({
           error: error.message || error,
         }, 'Failed to delete webhook after all retries. Bot will continue in polling mode.')
         return
       }
-      
+
       // Wait before retry (exponential backoff)
-      const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000)
+      const delay = Math.min(1000 * (2 ** (attempt - 1)), 5000)
       logger.info(`Retrying webhook deletion in ${delay}ms...`)
       await new Promise(resolve => setTimeout(resolve, delay))
     }
@@ -166,16 +194,16 @@ async function setWebhookWithRetry(api: any, config: any, logger: any, maxRetrie
         maxRetries,
         error: error.message || error,
       }, `Failed to set webhook (attempt ${attempt}/${maxRetries})`)
-      
+
       if (attempt === maxRetries) {
         logger.error({
           error: error.message || error,
         }, 'Failed to set webhook after all retries. Server will continue but webhook may not work.')
         return
       }
-      
+
       // Wait before retry (exponential backoff)
-      const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000)
+      const delay = Math.min(1000 * (2 ** (attempt - 1)), 5000)
       logger.info(`Retrying webhook setup in ${delay}ms...`)
       await new Promise(resolve => setTimeout(resolve, delay))
     }

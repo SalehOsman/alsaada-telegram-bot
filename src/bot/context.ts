@@ -87,6 +87,57 @@ export interface SessionData {
       experienceTo?: number
     }
   }
+  // Leaves schedule filter
+  leavesScheduleFilter?: {
+    departmentId?: number
+    positionId?: number
+    governorateId?: number
+    period?: 'week' | 'month' | 'all'
+  }
+  // Mission form data
+  missionForm?: {
+    step: string
+    employeeId?: number
+    missionType?: string
+    startDate?: string
+    endDate?: string
+    location?: string
+    purpose?: string
+    allowanceAmount?: number
+    notes?: string
+    messageIdsToDelete?: number[]
+  }
+  // Employee search state
+  employeeSearch?: {
+    filterType: 'department' | 'governorate' | 'position' | 'status' | 'all'
+    filterId?: number
+    filterValue?: string
+    searchTerm?: string
+    employeeIds?: number[]
+  }
+  // Settlement state
+  settlementState?: {
+    mode: 'custom-period' | 'bulk-employee' | 'bulk-period' | 'bulk-type'
+    step: 'start-date' | 'end-date' | 'select-employee' | 'confirm'
+    employeeId?: number
+    employeeName?: string
+    transactionIds?: number[]
+    startDate?: string
+    endDate?: string
+  }
+  // Work/Leave cycle management
+  workLeaveCycle?: {
+    type: 'position' | 'employee' | 'search'
+    entityId?: number
+    fieldType?: 'work' | 'leave' | 'both'
+    step?: 'awaiting_value' | 'awaiting_name'
+    data?: any
+  }
+  // Penalty cancellation
+  penaltyCancel?: {
+    penaltyId: number
+    step: 'waiting_reason'
+  }
 }
 
 interface ExtendedContextFlavor {

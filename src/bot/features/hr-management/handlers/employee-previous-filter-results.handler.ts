@@ -70,7 +70,7 @@ employeePreviousFilterResultsHandler.callbackQuery(/^filter:prev:dept:(\d+)$/, a
 
     // Build clickable employee list
     const page = 1
-    const itemsPerPage = 10
+    const itemsPerPage = 20
     const totalPages = Math.ceil(employees.length / itemsPerPage)
     const startIndex = (page - 1) * itemsPerPage
     const currentPageEmployees = employees.slice(startIndex, startIndex + itemsPerPage)
@@ -178,7 +178,7 @@ employeePreviousFilterResultsHandler.callbackQuery(/^filter:prev:gov:(\d+)$/, as
 
     // Build clickable employee list
     const page = 1
-    const itemsPerPage = 10
+    const itemsPerPage = 20
     const totalPages = Math.ceil(employees.length / itemsPerPage)
     const startIndex = (page - 1) * itemsPerPage
     const currentPageEmployees = employees.slice(startIndex, startIndex + itemsPerPage)
@@ -288,7 +288,7 @@ employeePreviousFilterResultsHandler.callbackQuery(/^filter:prev:pos:(\d+)$/, as
 
     // Build clickable employee list
     const page = 1
-    const itemsPerPage = 10
+    const itemsPerPage = 20
     const totalPages = Math.ceil(employees.length / itemsPerPage)
     const startIndex = (page - 1) * itemsPerPage
     const currentPageEmployees = employees.slice(startIndex, startIndex + itemsPerPage)
@@ -390,7 +390,7 @@ employeePreviousFilterResultsHandler.callbackQuery(/^filter:prev:status:(.+)$/, 
 
     // Build clickable employee list
     const page = 1
-    const itemsPerPage = 10
+    const itemsPerPage = 20
     const totalPages = Math.ceil(employees.length / itemsPerPage)
     const startIndex = (page - 1) * itemsPerPage
     const currentPageEmployees = employees.slice(startIndex, startIndex + itemsPerPage)
@@ -491,7 +491,7 @@ employeePreviousFilterResultsHandler.callbackQuery('filter:prev:all', async (ctx
 
     // Build clickable employee list
     const page = 1
-    const itemsPerPage = 10
+    const itemsPerPage = 20
     const totalPages = Math.ceil(employees.length / itemsPerPage)
     const startIndex = (page - 1) * itemsPerPage
     const currentPageEmployees = employees.slice(startIndex, startIndex + itemsPerPage)

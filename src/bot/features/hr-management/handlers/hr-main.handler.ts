@@ -1,7 +1,6 @@
 import type { Context } from '../../../context.js'
 import { Composer } from 'grammy'
 import { MenuBuilder } from '../../registry/menu-builder.js'
-import type { UserRole } from '../../registry/types.js'
 
 export const hrMainHandler = new Composer<Context>()
 
@@ -11,18 +10,19 @@ export const hrMainHandler = new Composer<Context>()
  */
 hrMainHandler.callbackQuery(/^menu:feature:hr-management$/, async (ctx) => {
   await ctx.answerCallbackQuery()
-  
-  // تحويل Role إلى UserRole (معالجة MODERATOR)
-  const dbRole = ctx.dbUser?.role ?? 'GUEST'
-  const userRole: UserRole = dbRole === 'MODERATOR' ? 'USER' : dbRole as UserRole
-  
+
+  if (!ctx.dbUser) {
+    await ctx.answerCallbackQuery('⛔ ليس لديك صلاحية الوصول')
+    return
+  }
+
   // استخدام MenuBuilder لبناء القائمة تلقائياً من config.ts
-  const keyboard = MenuBuilder.buildSubMenu('hr-management', userRole, {
+  const keyboard = await MenuBuilder.buildSubMenu('hr-management', ctx.dbUser, {
     maxButtonsPerRow: 1,
     showBackButton: true,
-    backButtonText: '⬅️ رجوع للقائمة الرئيسية'
+    backButtonText: '⬅️ رجوع للقائمة الرئيسية',
   })
-  
+
   if (!keyboard) {
     await ctx.answerCallbackQuery('⚠️ القسم غير متاح')
     return
@@ -32,6 +32,6 @@ hrMainHandler.callbackQuery(/^menu:feature:hr-management$/, async (ctx) => {
     '👥 **شئون العاملين**\n\n'
     + 'إدارة شاملة للموارد البشرية\n\n'
     + '📌 اختر القسم المطلوب:',
-    { parse_mode: 'Markdown', reply_markup: keyboard }
+    { parse_mode: 'Markdown', reply_markup: keyboard },
   )
 })

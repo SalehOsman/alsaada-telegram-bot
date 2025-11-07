@@ -5,13 +5,65 @@
  */
 
 import type { Context } from '#root/bot/context.js'
-import { RequestStatus } from '../../../../../generated/prisma/index.js'
 import { Database } from '#root/modules/database/index.js'
-import { RoleManager } from '#root/modules/permissions/index.js'
 import { logger } from '#root/modules/services/logger/index.js'
 import { Composer, InlineKeyboard } from 'grammy'
+import { RequestStatus } from '../../../../../generated/prisma/index.js'
 
 export const joinRequestsHandler = new Composer<Context>()
+
+// دعم نمط MenuBuilder المباشر بالاسم
+joinRequestsHandler.callbackQuery('joinRequestsHandler', async (ctx) => {
+  try {
+    await ctx.answerCallbackQuery()
+
+    // نفس منطق القائمة الرئيسية لطلبات الانضمام
+    const pendingRequests = await Database.prisma.joinRequest.findMany({
+      where: { status: RequestStatus.PENDING },
+      orderBy: { requestedAt: 'desc' },
+      take: 10,
+    })
+
+    const rejectedCount = await Database.prisma.joinRequest.count({
+      where: { status: RequestStatus.REJECTED },
+    })
+
+    if (pendingRequests.length === 0) {
+      const keyboard = new InlineKeyboard()
+      if (rejectedCount > 0) {
+        keyboard.text(`❌ عرض المرفوضة (${rejectedCount})`, 'join:rejected-list').row()
+      }
+      keyboard.text('⬅️ رجوع', 'menu:feature:admin-panel')
+
+      await ctx.editMessageText(
+        '📋 **طلبات الانضمام**\n\n'
+        + '✅ لا توجد طلبات قيد المراجعة',
+        { parse_mode: 'Markdown', reply_markup: keyboard },
+      )
+      return
+    }
+
+    const keyboard = new InlineKeyboard()
+    pendingRequests.forEach((request) => {
+      keyboard.text(`👤 ${request.fullName} (${request.phone})`, `join:details:${request.id}`)
+      keyboard.row()
+    })
+    if (rejectedCount > 0) {
+      keyboard.text(`❌ عرض المرفوضة (${rejectedCount})`, 'join:rejected-list').row()
+    }
+    keyboard.text('⬅️ رجوع', 'menu:feature:admin-panel')
+
+    await ctx.editMessageText(
+      `📋 **طلبات الانضمام قيد المراجعة (${pendingRequests.length})**\n\n`
+      + 'اختر طلباً لعرض التفاصيل:',
+      { parse_mode: 'Markdown', reply_markup: keyboard },
+    )
+  }
+  catch (error) {
+    logger.error({ error }, 'Error showing join requests via direct handler')
+    await ctx.answerCallbackQuery('حدث خطأ')
+  }
+})
 
 /**
  * عرض قائمة طلبات الانضمام
@@ -32,11 +84,11 @@ joinRequestsHandler.callbackQuery(/^menu:sub:admin-panel:join-requests$/, async 
 
     if (pendingRequests.length === 0) {
       const keyboard = new InlineKeyboard()
-      
+
       if (rejectedCount > 0) {
         keyboard.text(`❌ عرض المرفوضة (${rejectedCount})`, 'join:rejected-list').row()
       }
-      
+
       keyboard.text('⬅️ رجوع', 'menu:feature:admin-panel')
 
       await ctx.editMessageText(

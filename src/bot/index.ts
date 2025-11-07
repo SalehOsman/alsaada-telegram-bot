@@ -11,11 +11,12 @@ import { settingsFeatureComposer } from '#root/bot/features/settings/index.js'
 import { unhandledFeature } from '#root/bot/features/unhandled.js'
 import { welcomeFeature, welcomeGenericHandler } from '#root/bot/features/welcome.js'
 import { errorHandler } from '#root/bot/handlers/error.js'
+import { banCheck } from '#root/bot/middlewares/ban-check.js'
 import { session } from '#root/bot/middlewares/session.js'
 import { updateLogger } from '#root/bot/middlewares/update-logger.js'
 import { greetingConversation } from '#root/modules/interaction/wizards/greeting.js'
-import { JOIN_REQUEST_CONVERSATION, joinRequestConversation } from '#root/modules/interaction/wizards/join-request.js'
-import { loadUserPermissions, RoleManager } from '#root/modules/permissions/index.js'
+import { joinRequestConversation } from '#root/modules/interaction/wizards/join-request.js'
+import { loadUserPermissions } from '#root/modules/permissions/index.js'
 import { FileManagementService } from '#root/modules/services/file-management/index.js'
 import { i18n, isMultipleLocales } from '#root/modules/services/i18n-extended/i18n.js'
 import { registerDefaultSettings, settingsManager } from '#root/modules/settings/index.js'
@@ -100,6 +101,9 @@ export async function createBot(token: string, dependencies: Dependencies, botCo
   // Load permissions context into ctx.dbUser
   protectedBot.use(loadUserPermissions())
 
+  // Ban check - Block banned users from any interaction
+  protectedBot.use(banCheck())
+
   // Rate Limiter - Protection from spam and abuse
   // protectedBot.use(rateLimiterHandler)
   // logger.info('Rate Limiter middleware enabled')
@@ -153,7 +157,7 @@ export async function createBot(token: string, dependencies: Dependencies, botCo
 
   // Main menu (should be AFTER feature composers so features handle their callbacks first)
   protectedBot.use(mainMenuComposer)
-  
+
   // Generic text handler from welcome (LOWEST priority - only for profile editing)
   protectedBot.use(welcomeGenericHandler)
 

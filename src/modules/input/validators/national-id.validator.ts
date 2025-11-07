@@ -107,10 +107,11 @@ export function validateNationalIDWithInfo(id: string): {
   const month = Number.parseInt(id.substring(3, 5))
   const day = Number.parseInt(id.substring(5, 7))
   const governorate = Number.parseInt(id.substring(7, 9))
-  const sequence = Number.parseInt(id.substring(9, 13))
+  const genderDigit = Number.parseInt(id[12])
 
-  // تحديد الجنس من الرقم التسلسلي (فردي = ذكر، زوجي = أنثى)
-  const gender = sequence % 2 === 1 ? 'male' : 'female'
+  // تحديد الجنس من الرقم قبل الأخير (الموضع 12)
+  // فردي = ذكر، زوجي = أنثى
+  const gender = genderDigit % 2 === 1 ? 'male' : 'female'
 
   // حساب سنة الميلاد الكاملة
   const fullYear = century === 2 ? 1900 + year : 2000 + year

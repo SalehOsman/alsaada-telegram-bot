@@ -17,6 +17,24 @@ const banState = new Map<number, {
   reason?: string
 }>()
 
+// دعم نمط MenuBuilder المباشر بالاسم
+banUserHandler.callbackQuery('banUserHandler', async (ctx) => {
+  try {
+    await ctx.answerCallbackQuery()
+
+    const userId = ctx.from?.id
+    if (!userId)
+      return
+
+    banState.set(userId, {})
+    await showBanMenu(ctx, userId)
+  }
+  catch (error) {
+    console.error('Error in banUserHandler:', error)
+    await ctx.answerCallbackQuery('حدث خطأ')
+  }
+})
+
 /**
  * القائمة الرئيسية للحظر
  */

@@ -2,15 +2,22 @@
  * خدمة إشعارات الإجازات
  */
 
+import type { Api } from 'grammy'
 import { Database } from '#root/modules/database/index.js'
 import { logger } from '#root/modules/services/logger/index.js'
 import { LeaveScheduleService } from './leave-schedule.service.js'
 
 export class LeaveNotificationsService {
+  private botApi: Api
+
+  constructor(botApi: Api) {
+    this.botApi = botApi
+  }
+
   /**
    * إرسال إشعارات قبل بداية الإجازة بـ 24 ساعة
    */
-  static async sendLeaveStartReminders() {
+  async sendLeaveStartReminders() {
     try {
       const tomorrow = new Date()
       tomorrow.setDate(tomorrow.getDate() + 1)
@@ -49,7 +56,7 @@ export class LeaveNotificationsService {
   /**
    * إرسال إشعارات قبل موعد العودة بـ 24 ساعة
    */
-  static async sendLeaveReturnReminders() {
+  async sendLeaveReturnReminders() {
     try {
       const tomorrow = new Date()
       tomorrow.setDate(tomorrow.getDate() + 1)
@@ -97,16 +104,21 @@ export class LeaveNotificationsService {
   /**
    * التحقق من الإجازات المتأخرة
    */
-  static async checkOverdueLeaves() {
+  async checkOverdueLeaves() {
     try {
       const overdueLeaves = await LeaveScheduleService.getOverdueLeaves()
 
       logger.info({ count: overdueLeaves.length }, 'Checking overdue leaves')
 
       for (const leave of overdueLeaves) {
+        // تخطي الإجازات التي تم تسجيل عودة فعلية لها
+        if (leave.actualReturnDate) {
+          continue
+        }
+
         const delayDays = LeaveScheduleService.calculateDelayDays(
           leave.endDate,
-          new Date()
+          new Date(),
         )
 
         if (delayDays >= 1) {
@@ -122,11 +134,11 @@ export class LeaveNotificationsService {
   /**
    * إرسال إشعار للأدمن
    */
-  private static async notifyAdmins(
+  private async notifyAdmins(
     type: 'leave_start' | 'leave_return' | 'leave_overdue' | 'leave_registered',
     employee: any,
     leave?: any,
-    delayDays?: number
+    delayDays?: number,
   ) {
     try {
       // الحصول على الأدمن
@@ -139,44 +151,79 @@ export class LeaveNotificationsService {
         },
       })
 
+      if (admins.length === 0) {
+        logger.warn('No active admins found to send notifications')
+        return
+      }
+
       let message = ''
 
+      // بناء الرسالة حسب النوع
       switch (type) {
         case 'leave_start':
-          message = `⏰ تذكير: إجازة قادمة\n\n`
-            + `👤 العامل: ${employee.fullName}\n`
-            + `💼 الوظيفة: ${employee.position?.titleAr || 'غير محدد'}\n`
-            + `📅 موعد الإجازة: غداً ${this.formatDate(employee.nextLeaveStartDate)}\n`
-            + `⏱️ المدة: ${employee.leaveDaysPerCycle} أيام\n`
-            + `📅 العودة المتوقعة: ${this.formatDate(employee.nextLeaveEndDate)}`
+          message = `🔔 *إشعار بداية إجازة*\n\n`
+          message += `� *رقم الموظف:* #${employee.employeeCode || employee.id}\n`
+          message += `👤 *الاسم:* ${employee.fullName}\n`
+          message += `💼 *الوظيفة:* ${employee.position?.titleAr || employee.position?.title || 'غير محددة'}\n`
+          message += `🏢 *القسم:* ${employee.department?.name || 'غير محدد'}\n`
+          message += `📅 *تاريخ بداية الإجازة:* ${this.formatDate(employee.nextLeaveStartDate)}\n`
+          message += `\n⏰ غداً سيبدأ إجازته`
           break
 
         case 'leave_return':
-          message = `↩️ تذكير: موعد العودة\n\n`
-            + `👤 العامل: ${employee.fullName}\n`
-            + `📋 إجازة: #${leave?.id}\n`
-            + `📅 موعد العودة: غداً ${this.formatDate(leave?.endDate)}`
+          message = `🔔 *إشعار نهاية إجازة*\n\n`
+          message += `🆔 *رقم الإجازة:* #${leave?.id || 'غير متوفر'}\n`
+          message += `� *رقم الموظف:* #${employee.employeeCode || employee.id}\n`
+          message += `👤 *الاسم:* ${employee.fullName}\n`
+          message += `💼 *الوظيفة:* ${employee.position?.titleAr || employee.position?.title || 'غير محددة'}\n`
+          message += `🏢 *القسم:* ${employee.department?.name || 'غير محدد'}\n`
+          message += `📅 *بداية الإجازة:* ${this.formatDate(leave?.startDate)}\n`
+          message += `📅 *نهاية الإجازة:* ${this.formatDate(leave?.endDate)}\n`
+          message += `\n⏰ غداً موعد عودته من الإجازة`
           break
 
         case 'leave_overdue':
-          message = `⚠️ تنبيه: تأخر عن العودة\n\n`
-            + `👤 العامل: ${employee.fullName}\n`
-            + `📋 إجازة: #${leave?.id}\n`
-            + `📅 كان يجب العودة: ${this.formatDate(leave?.endDate)}\n`
-            + `⏰ تأخر: ${delayDays} يوم`
+          message = `⚠️ *إشعار تأخير عن العودة*\n\n`
+          message += `🆔 *رقم الإجازة:* #${leave?.id || 'غير متوفر'}\n`
+          message += `� *رقم الموظف:* #${employee.employeeCode || employee.id}\n`
+          message += `👤 *الاسم:* ${employee.fullName}\n`
+          message += `💼 *الوظيفة:* ${employee.position?.titleAr || employee.position?.title || 'غير محددة'}\n`
+          message += `🏢 *القسم:* ${employee.department?.name || 'غير محدد'}\n`
+          message += `📅 *بداية الإجازة:* ${this.formatDate(leave?.startDate)}\n`
+          message += `📅 *نهاية الإجازة:* ${this.formatDate(leave?.endDate)}\n`
+          message += `📊 *أيام التأخير:* ${delayDays} يوم\n`
+          message += `\n⚠️ متأخر عن موعد العودة`
           break
 
         case 'leave_registered':
-          message = `✅ تم تسجيل إجازة جديدة\n\n`
-            + `📋 رقم: #${leave?.id}\n`
-            + `👤 العامل: ${employee.fullName}\n`
-            + `📅 من: ${this.formatDate(leave?.startDate)} إلى: ${this.formatDate(leave?.endDate)}\n`
-            + `⏱️ المدة: ${leave?.totalDays} أيام`
+          message = `✅ *إجازة جديدة مسجلة*\n\n`
+          message += `🆔 *رقم الإجازة:* #${leave?.id || 'غير متوفر'}\n`
+          message += `� *رقم الموظف:* #${employee.employeeCode || employee.id}\n`
+          message += `👤 *الاسم:* ${employee.fullName}\n`
+          message += `💼 *الوظيفة:* ${employee.position?.titleAr || employee.position?.title || 'غير محددة'}\n`
+          message += `🏢 *القسم:* ${employee.department?.name || 'غير محدد'}\n`
+          message += `📅 *بداية الإجازة:* ${this.formatDate(leave?.startDate)}\n`
+          message += `📅 *نهاية الإجازة:* ${this.formatDate(leave?.endDate)}\n`
           break
       }
 
-      // هنا يمكن إرسال الإشعار عبر Telegram
-      logger.info({ type, employeeId: employee.id, adminsCount: admins.length }, 'Notification sent to admins')
+      // إرسال للجميع
+      for (const admin of admins) {
+        try {
+          await this.botApi.sendMessage(String(admin.telegramId), message, {
+            parse_mode: 'Markdown',
+          })
+        }
+        catch (error) {
+          logger.error({ adminId: admin.id, error }, 'Error sending notification to admin')
+        }
+      }
+
+      logger.info({
+        type,
+        employeeId: employee.id,
+        adminsNotified: admins.length,
+      }, 'Notifications sent to admins')
     }
     catch (error) {
       logger.error({ error }, 'Error notifying admins')
@@ -186,15 +233,28 @@ export class LeaveNotificationsService {
   /**
    * إرسال إشعار للعامل
    */
-  private static async notifyEmployee(employee: any, leave: any) {
+  private async notifyEmployee(employee: any, leave: any) {
     try {
-      const message = `↩️ تذكير: موعد العودة\n\n`
-        + `📋 إجازة: #${leave.id}\n`
-        + `📅 موعد العودة: غداً ${this.formatDate(leave.endDate)}\n\n`
-        + `نتمنى لك عودة سالمة 🙏`
+      if (!employee.telegramId) {
+        logger.warn({ employeeId: employee.id }, 'Employee has no Telegram ID')
+        return
+      }
 
-      // هنا يمكن إرسال الإشعار عبر Telegram
-      logger.info({ employeeId: employee.id, telegramId: employee.telegramId }, 'Notification sent to employee')
+      const message = `🔔 *تذكير بموعد العودة*\n\n`
+        + `عزيزي ${employee.fullName}\n`
+        + `نذكرك بأن موعد عودتك من الإجازة هو غداً\n`
+        + `📅 ${this.formatDate(leave.endDate)}\n\n`
+        + `نتمنى لك إجازة سعيدة ونراك قريباً`
+
+      await this.botApi.sendMessage(String(employee.telegramId), message, {
+        parse_mode: 'Markdown',
+      })
+
+      logger.info({
+        employeeId: employee.id,
+        telegramId: employee.telegramId,
+        leaveId: leave.id,
+      }, 'Return notification sent to employee')
     }
     catch (error) {
       logger.error({ error }, 'Error notifying employee')
@@ -204,9 +264,10 @@ export class LeaveNotificationsService {
   /**
    * تنسيق التاريخ
    */
-  private static formatDate(date: Date | null | undefined): string {
-    if (!date) return 'غير محدد'
-    
+  private formatDate(date: Date | null | undefined): string {
+    if (!date)
+      return 'غير محدد'
+
     const d = new Date(date)
     return d.toLocaleDateString('ar-EG', {
       year: 'numeric',

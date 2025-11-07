@@ -1,0 +1,105 @@
+{
+  "tech_stack": [
+    "TypeScript",
+    "Node.js",
+    "Grammy (Telegram Bot Framework)",
+    "Hono (HTTP Server)",
+    "Prisma (ORM)",
+    "SQLite/PostgreSQL",
+    "Jest (Testing)"
+  ],
+  "features": [
+    {
+      "name": "Health Check API",
+      "description": "Returns server status to verify the server is running",
+      "files": [
+        "src/server/index.ts"
+      ],
+      "api_doc": {
+        "openapi": "3.0.0",
+        "info": {
+          "title": "Telegram Bot Server API",
+          "version": "1.0.0",
+          "description": "HTTP server endpoints for Telegram bot webhook mode"
+        },
+        "servers": [
+          {
+            "url": "http://localhost:3000",
+            "description": "Development server"
+          }
+        ],
+        "paths": {
+          "/": {
+            "get": {
+              "summary": "Health check endpoint",
+              "description": "Returns server status",
+              "operationId": "healthCheck",
+              "responses": {
+                "200": {
+                  "description": "Server is running",
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "type": "object",
+                        "properties": {
+                          "status": {
+                            "type": "boolean",
+                            "example": true
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "/webhook": {
+            "post": {
+              "summary": "Telegram webhook endpoint",
+              "description": "Receives Telegram bot updates via webhook",
+              "operationId": "webhook",
+              "security": [
+                {
+                  "SecretToken": []
+                }
+              ],
+              "requestBody": {
+                "required": true,
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "type": "object",
+                      "description": "Telegram Update object"
+                    }
+                  }
+                }
+              },
+              "responses": {
+                "200": {
+                  "description": "Update processed successfully"
+                },
+                "401": {
+                  "description": "Unauthorized - Invalid secret token"
+                },
+                "500": {
+                  "description": "Internal server error"
+                }
+              }
+            }
+          }
+        },
+        "components": {
+          "securitySchemes": {
+            "SecretToken": {
+              "type": "http",
+              "scheme": "bearer",
+              "description": "Telegram webhook secret token"
+            }
+          }
+        }
+      }
+    }
+  ]
+}
+

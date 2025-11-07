@@ -3,11 +3,11 @@
  */
 
 import type { Context } from '../../../context.js'
-import { Composer, InlineKeyboard } from 'grammy'
 import { Database } from '#root/modules/database/index.js'
-import { EmployeeSelector } from '#root/modules/ui/employee-selector.js'
-import { Calendar } from '#root/modules/ui/calendar.js'
 import { LeaveScheduleService } from '#root/modules/services/leave-schedule.service.js'
+import { Calendar } from '#root/modules/ui/calendar.js'
+import { EmployeeSelector } from '#root/modules/ui/employee-selector.js'
+import { Composer, InlineKeyboard } from 'grammy'
 
 export const leavesAddHandler = new Composer<Context>()
 
@@ -28,16 +28,31 @@ leavesAddHandler.callbackQuery('leaves:add', async (ctx) => {
   await ctx.answerCallbackQuery()
 
   const userId = ctx.from?.id
-  if (!userId) return
+  if (!userId)
+    return
 
   try {
     const prisma = Database.prisma
 
-    // جلب العاملين النشطين
+    // جلب العاملين النشطين الذين ليس لديهم إجازات مفتوحة (بدون تسجيل عودة)
+    // ⚠️ استبعاد التسويات النقدية (CASH_SETTLEMENT) لأنها ليست إجازات فعلية
+    // ⚠️ استبعاد الموظفين الموقوفين عن العمل (SUSPENDED)
     const employees = await prisma.employee.findMany({
       where: {
         isActive: true,
-        employmentStatus: 'ACTIVE',
+        employmentStatus: 'ACTIVE', // ❌ استبعاد الموقوفين (SUSPENDED)
+        // ✅ استبعاد العاملين الذين لديهم إجازة فعلية مفتوحة
+        NOT: {
+          leaves: {
+            some: {
+              actualReturnDate: null, // لم يتم تسجيل العودة
+              status: {
+                in: ['PENDING', 'APPROVED'],
+              },
+              settlementType: 'ACTUAL_LEAVE', // 🏖️ إجازات فعلية فقط
+            },
+          },
+        },
       },
       include: {
         position: true,
@@ -50,10 +65,11 @@ leavesAddHandler.callbackQuery('leaves:add', async (ctx) => {
 
     if (employees.length === 0) {
       await ctx.editMessageText(
-        '❌ لا يوجد عاملين نشطين في النظام.',
+        '❌ لا يوجد عاملين متاحين لتسجيل إجازة.\n\n'
+        + 'ℹ️ جميع العاملين النشطين لديهم إجازات فعلية لم يتم تسجيل عودتهم بعد.',
         {
           reply_markup: new InlineKeyboard().text('⬅️ رجوع', 'leavesHandler'),
-        }
+        },
       )
       return
     }
@@ -76,7 +92,7 @@ leavesAddHandler.callbackQuery('leaves:add', async (ctx) => {
       {
         parse_mode: 'Markdown',
         reply_markup: keyboard,
-      }
+      },
     )
 
     // حفظ الحالة
@@ -88,8 +104,73 @@ leavesAddHandler.callbackQuery('leaves:add', async (ctx) => {
       '❌ حدث خطأ في تحميل قائمة العاملين.',
       {
         reply_markup: new InlineKeyboard().text('⬅️ رجوع', 'leavesHandler'),
-      }
+      },
     )
+  }
+})
+
+// التنقل بين صفحات قائمة العاملين
+leavesAddHandler.callbackQuery(/^leaves:add:page:(\d+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery()
+
+  const page = Number.parseInt(ctx.match[1])
+
+  try {
+    const prisma = Database.prisma
+
+    // جلب العاملين النشطين الذين ليس لديهم إجازات فعلية (بدون تسجيل عودة)
+    // ⚠️ استبعاد التسويات النقدية (CASH_SETTLEMENT) لأنها ليست إجازات فعلية
+    // ⚠️ استبعاد الموظفين الموقوفين عن العمل (SUSPENDED)
+    const employees = await prisma.employee.findMany({
+      where: {
+        isActive: true,
+        employmentStatus: 'ACTIVE', // ❌ استبعاد الموقوفين (SUSPENDED)
+        // ✅ استبعاد العاملين الذين لديهم إجازة فعلية مفتوحة
+        NOT: {
+          leaves: {
+            some: {
+              actualReturnDate: null,
+              status: {
+                in: ['PENDING', 'APPROVED'],
+              },
+              settlementType: 'ACTUAL_LEAVE', // 🏖️ إجازات فعلية فقط
+            },
+          },
+        },
+      },
+      include: {
+        position: true,
+        department: true,
+      },
+      orderBy: {
+        fullName: 'asc',
+      },
+    })
+
+    // إنشاء قائمة العاملين بالصفحة المطلوبة
+    const { keyboard, message } = EmployeeSelector.createWithSearch({
+      employees,
+      page,
+      pageSize: 10,
+      callbackPrefix: 'leaves:add:employee',
+      pageCallback: 'leaves:add:page',
+      searchCallback: 'leaves:add:search',
+    })
+
+    keyboard.row()
+    keyboard.text('⬅️ رجوع', 'leavesHandler')
+
+    await ctx.editMessageText(
+      `📝 **تسجيل إجازة جديدة**\n\n${message}\n\nاختر العامل:`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard,
+      },
+    )
+  }
+  catch (error) {
+    console.error('Error loading employees page:', error)
+    await ctx.answerCallbackQuery('❌ حدث خطأ في تحميل الصفحة')
   }
 })
 
@@ -98,7 +179,8 @@ leavesAddHandler.callbackQuery(/^leaves:add:employee:(\d+)$/, async (ctx) => {
   await ctx.answerCallbackQuery()
 
   const userId = ctx.from?.id
-  if (!userId) return
+  if (!userId)
+    return
 
   const employeeId = Number.parseInt(ctx.match[1])
 
@@ -119,6 +201,48 @@ leavesAddHandler.callbackQuery(/^leaves:add:employee:(\d+)$/, async (ctx) => {
       return
     }
 
+    // التحقق من وجود إجازات فعلية نشطة فقط (استبعاد بدل الإجازات والإجازات المستقبلية)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    const activeLeaves = await prisma.hR_EmployeeLeave.findMany({
+      where: {
+        employeeId,
+        isActive: true,
+        status: { in: ['PENDING', 'APPROVED'] },
+        settlementType: 'ACTUAL_LEAVE', // 🏖️ فقط الإجازات الفعلية (ليست تسوية نقدية)
+        startDate: { lte: today }, // بدأت بالفعل أو اليوم
+        endDate: { gte: today }, // لم تنتهي بعد
+      },
+      select: {
+        id: true,
+        leaveNumber: true,
+        startDate: true,
+        endDate: true,
+      },
+    })
+
+    if (activeLeaves.length > 0) {
+      const leave = activeLeaves[0]
+      await ctx.editMessageText(
+        `❌ **لا يمكن تسجيل إجازة جديدة**\n\n`
+        + `العامل في إجازة فعلية حالياً:\n\n`
+        + `📋 **رقم الإجازة:** ${leave.leaveNumber}\n`
+        + `📅 **من:** ${Calendar.formatArabic(leave.startDate)}\n`
+        + `📅 **إلى:** ${Calendar.formatArabic(leave.endDate)}\n\n`
+        + `💡 يجب تسجيل عودته من الإجازة أولاً.\n\n`
+        + `ℹ️ ملاحظة: بدل الإجازات المستقبلية لا تمنع تسجيل إجازات جديدة.`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: new InlineKeyboard()
+            .text('↩️ تسجيل عودة', 'leaves:return')
+            .row()
+            .text('⬅️ رجوع', 'leaves:add'),
+        },
+      )
+      return
+    }
+
     // عرض معلومات العامل
     let message = `📝 **تسجيل إجازة جديدة**\n\n`
     message += `👤 **العامل:** ${employee.fullName}\n`
@@ -128,11 +252,11 @@ leavesAddHandler.callbackQuery(/^leaves:add:employee:(\d+)$/, async (ctx) => {
     // معلومات دورة الإجازات
     if (employee.workDaysPerCycle && employee.leaveDaysPerCycle) {
       message += `🔄 **دورة العمل/الإجازة:** ${employee.workDaysPerCycle} يوم عمل + ${employee.leaveDaysPerCycle} يوم إجازة\n`
-      
+
       if (employee.nextLeaveStartDate) {
         message += `📅 **موعد الإجازة القادمة:** ${Calendar.formatArabic(employee.nextLeaveStartDate)}\n`
       }
-      
+
       if (employee.lastLeaveEndDate) {
         message += `📅 **آخر إجازة:** ${Calendar.formatArabic(employee.lastLeaveEndDate)}\n`
       }
@@ -173,13 +297,15 @@ leavesAddHandler.callbackQuery(/^leaves:add:type:(\d+):(\w+)$/, async (ctx) => {
   await ctx.answerCallbackQuery()
 
   const userId = ctx.from?.id
-  if (!userId) return
+  if (!userId)
+    return
 
   const employeeId = Number.parseInt(ctx.match[1])
   const leaveType = ctx.match[2]
 
   const data = formData.get(userId)
-  if (!data) return
+  if (!data)
+    return
 
   data.leaveType = leaveType
   data.step = 'selectStartDate'
@@ -205,7 +331,7 @@ leavesAddHandler.callbackQuery(/^leaves:add:type:(\d+):(\w+)$/, async (ctx) => {
     {
       parse_mode: 'Markdown',
       reply_markup: keyboard,
-    }
+    },
   )
 })
 
@@ -214,13 +340,15 @@ leavesAddHandler.callbackQuery(/^leaves:add:startDate:(\d+):(.+)$/, async (ctx) 
   await ctx.answerCallbackQuery()
 
   const userId = ctx.from?.id
-  if (!userId) return
+  if (!userId)
+    return
 
   const employeeId = Number.parseInt(ctx.match[1])
   const dateStr = ctx.match[2]
 
   const data = formData.get(userId)
-  if (!data) return
+  if (!data)
+    return
 
   const startDate = Calendar.parseDate(dateStr)
   if (!startDate) {
@@ -238,7 +366,8 @@ leavesAddHandler.callbackQuery(/^leaves:add:startDate:(\d+):(.+)$/, async (ctx) 
       where: { id: employeeId },
     })
 
-    if (!employee) return
+    if (!employee)
+      return
 
     // حساب تاريخ النهاية المقترح
     const suggestedEndDate = new Date(startDate)
@@ -265,7 +394,7 @@ leavesAddHandler.callbackQuery(/^leaves:add:startDate:(\d+):(.+)$/, async (ctx) 
       {
         parse_mode: 'Markdown',
         reply_markup: keyboard,
-      }
+      },
     )
   }
   catch (error) {
@@ -291,7 +420,7 @@ leavesAddHandler.callbackQuery(/^leaves:add:customEndDate:(\d+)$/, async (ctx) =
     {
       parse_mode: 'Markdown',
       reply_markup: keyboard,
-    }
+    },
   )
 })
 
@@ -300,13 +429,15 @@ leavesAddHandler.callbackQuery(/^leaves:add:endDate:(\d+):(.+)$/, async (ctx) =>
   await ctx.answerCallbackQuery()
 
   const userId = ctx.from?.id
-  if (!userId) return
+  if (!userId)
+    return
 
   const employeeId = Number.parseInt(ctx.match[1])
   const dateStr = ctx.match[2]
 
   const data = formData.get(userId)
-  if (!data || !data.startDate) return
+  if (!data || !data.startDate)
+    return
 
   const endDate = Calendar.parseDate(dateStr)
   const startDate = Calendar.parseDate(data.startDate)
@@ -342,17 +473,19 @@ leavesAddHandler.callbackQuery(/^leaves:add:endDate:(\d+):(.+)$/, async (ctx) =>
     {
       parse_mode: 'Markdown',
       reply_markup: keyboard,
-    }
+    },
   )
 })
 
 // استقبال الملاحظات
 leavesAddHandler.on('message:text', async (ctx) => {
   const userId = ctx.from?.id
-  if (!userId) return
+  if (!userId)
+    return
 
   const data = formData.get(userId)
-  if (!data || data.step !== 'addNotes') return
+  if (!data || data.step !== 'addNotes')
+    return
 
   data.notes = ctx.message.text.trim()
   formData.set(userId, data)
@@ -362,7 +495,7 @@ leavesAddHandler.on('message:text', async (ctx) => {
     {
       reply_markup: new InlineKeyboard()
         .text('📋 عرض الملخص', `leaves:add:confirm:${data.employeeId}`),
-    }
+    },
   )
 })
 
@@ -371,7 +504,8 @@ leavesAddHandler.callbackQuery(/^leaves:add:confirm:(\d+)$/, async (ctx) => {
   await ctx.answerCallbackQuery()
 
   const userId = ctx.from?.id
-  if (!userId) return
+  if (!userId)
+    return
 
   const employeeId = Number.parseInt(ctx.match[1])
   const data = formData.get(userId)
@@ -390,11 +524,69 @@ leavesAddHandler.callbackQuery(/^leaves:add:confirm:(\d+)$/, async (ctx) => {
       },
     })
 
-    if (!employee) return
+    if (!employee)
+      return
 
     const startDate = Calendar.parseDate(data.startDate)
     const endDate = Calendar.parseDate(data.endDate)
-    if (!startDate || !endDate) return
+    if (!startDate || !endDate)
+      return
+
+    // التحقق من عدم وجود تداخل في التواريخ مع إجازات أخرى
+    const overlappingLeaves = await prisma.hR_EmployeeLeave.findMany({
+      where: {
+        employeeId,
+        isActive: true,
+        actualReturnDate: null, // ✅ فقط الإجازات المفتوحة (التي لم يتم تسجيل عودة لها)
+        status: { in: ['PENDING', 'APPROVED'] },
+        OR: [
+          // الإجازة الجديدة تبدأ خلال إجازة موجودة
+          {
+            AND: [
+              { startDate: { lte: startDate } },
+              { endDate: { gte: startDate } },
+            ],
+          },
+          // الإجازة الجديدة تنتهي خلال إجازة موجودة
+          {
+            AND: [
+              { startDate: { lte: endDate } },
+              { endDate: { gte: endDate } },
+            ],
+          },
+          // الإجازة الجديدة تحيط بإجازة موجودة
+          {
+            AND: [
+              { startDate: { gte: startDate } },
+              { endDate: { lte: endDate } },
+            ],
+          },
+        ],
+      },
+      select: {
+        leaveNumber: true,
+        startDate: true,
+        endDate: true,
+      },
+    })
+
+    if (overlappingLeaves.length > 0) {
+      const leave = overlappingLeaves[0]
+      await ctx.editMessageText(
+        `❌ **تعارض في التواريخ!**\n\n`
+        + `هناك إجازة مسجلة تتداخل مع الفترة المطلوبة:\n\n`
+        + `📋 **الإجازة المتعارضة:** ${leave.leaveNumber}\n`
+        + `📅 **من:** ${Calendar.formatArabic(leave.startDate)}\n`
+        + `📅 **إلى:** ${Calendar.formatArabic(leave.endDate)}\n\n`
+        + `يرجى اختيار تواريخ مختلفة أو حذف الإجازة المتعارضة.`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: new InlineKeyboard()
+            .text('⬅️ رجوع', 'leaves:add'),
+        },
+      )
+      return
+    }
 
     const totalDays = LeaveScheduleService.calculateTotalDays(startDate, endDate)
 
@@ -439,7 +631,8 @@ leavesAddHandler.callbackQuery(/^leaves:add:save:(\d+)$/, async (ctx) => {
   await ctx.answerCallbackQuery('جاري الحفظ...')
 
   const userId = ctx.from?.id
-  if (!userId) return
+  if (!userId)
+    return
 
   const employeeId = Number.parseInt(ctx.match[1])
   const data = formData.get(userId)
@@ -454,7 +647,8 @@ leavesAddHandler.callbackQuery(/^leaves:add:save:(\d+)$/, async (ctx) => {
 
     const startDate = Calendar.parseDate(data.startDate)
     const endDate = Calendar.parseDate(data.endDate)
-    if (!startDate || !endDate) return
+    if (!startDate || !endDate)
+      return
 
     const totalDays = LeaveScheduleService.calculateTotalDays(startDate, endDate)
 
@@ -470,7 +664,8 @@ leavesAddHandler.callbackQuery(/^leaves:add:save:(\d+)$/, async (ctx) => {
       },
     })
 
-    if (!employee) return
+    if (!employee)
+      return
 
     // حفظ الإجازة
     const leave = await prisma.hR_EmployeeLeave.create({
@@ -524,7 +719,7 @@ leavesAddHandler.callbackQuery(/^leaves:add:save:(\d+)$/, async (ctx) => {
     report += `━━━━━━━━━━━━━━━━━━━━\n`
     report += `📋 **تقرير الإجازة**\n`
     report += `━━━━━━━━━━━━━━━━━━━━\n\n`
-    
+
     // بيانات العامل
     report += `👤 **العامل:** ${employee.fullName}`
     if (employee.nickname) {
@@ -534,7 +729,7 @@ leavesAddHandler.callbackQuery(/^leaves:add:save:(\d+)$/, async (ctx) => {
     report += `🔢 **كود العامل:** ${employee.employeeCode}\n`
     report += `💼 **الوظيفة:** ${employee.position?.titleAr || 'غير محدد'}\n`
     report += `🏢 **القسم:** ${employee.department?.name || 'غير محدد'}\n\n`
-    
+
     // بيانات الإجازة
     report += `━━━━━━━━━━━━━━━━━━━━\n`
     report += `📋 **رقم الإجازة:** ${leaveNumber}\n`
@@ -542,11 +737,11 @@ leavesAddHandler.callbackQuery(/^leaves:add:save:(\d+)$/, async (ctx) => {
     report += `📅 **من:** ${startDateFormatted}\n`
     report += `📅 **إلى:** ${endDateFormatted}\n`
     report += `⏱️ **المدة:** ${totalDays} أيام\n`
-    
+
     if (data.notes) {
       report += `\n💬 **ملاحظات:**\n${data.notes}\n`
     }
-    
+
     // بيانات التسجيل
     report += `\n━━━━━━━━━━━━━━━━━━━━\n`
     report += `👨‍💼 **مسجل الإجازة:** ${admin?.fullName || 'غير معروف'}\n`
@@ -571,7 +766,7 @@ leavesAddHandler.callbackQuery(/^leaves:add:save:(\d+)$/, async (ctx) => {
       '❌ حدث خطأ في حفظ الإجازة.',
       {
         reply_markup: new InlineKeyboard().text('⬅️ رجوع', 'leavesHandler'),
-      }
+      },
     )
   }
 })

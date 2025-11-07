@@ -89,6 +89,53 @@ export class FeatureLoader {
   }
 
   /**
+   * Restore feature states from database
+   * IMPORTANT: Must be called AFTER Database.connect()
+   */
+  async restoreFeatureStates(): Promise<void> {
+    try {
+      const { Database } = await import('#root/modules/database/index.js')
+      const allFeatures = featureRegistry.getAll()
+
+      for (const feature of allFeatures) {
+        try {
+          // First, try to get state from DepartmentConfig (source of truth)
+          let departmentConfig = await Database.prisma.departmentConfig.findUnique({
+            where: { code: feature.config.id },
+          })
+
+          // If DepartmentConfig doesn't exist, create it
+          if (!departmentConfig) {
+            logger.debug(`Creating DepartmentConfig for ${feature.config.id}`)
+            departmentConfig = await Database.prisma.departmentConfig.create({
+              data: {
+                code: feature.config.id,
+                name: feature.config.name,
+                isEnabled: feature.config.enabled ?? true,
+                minRole: 'ADMIN',
+                order: feature.config.order ?? 0,
+              },
+            })
+          }
+
+          // Use DepartmentConfig.isEnabled as the source of truth
+          feature.config.enabled = departmentConfig.isEnabled
+          logger.debug(`Restored state for ${feature.config.id} from DepartmentConfig: ${departmentConfig.isEnabled}`)
+        }
+        catch (error) {
+          // Log error but keep default state
+          logger.debug(`Error restoring state for ${feature.config.id}, using default: ${error}`)
+        }
+      }
+
+      logger.info('Feature states restored from database')
+    }
+    catch (error) {
+      logger.error({ error }, 'Failed to restore feature states')
+    }
+  }
+
+  /**
    * Load a single feature
    */
   private async loadFeature(featureId: string, indexPath: string, useSourceFile: boolean): Promise<void> {

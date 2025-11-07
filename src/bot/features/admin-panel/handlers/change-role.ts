@@ -18,6 +18,24 @@ const changeRoleState = new Map<number, {
   reason?: string
 }>()
 
+// دعم نمط MenuBuilder المباشر بالاسم
+changeRoleHandler.callbackQuery('changeRoleHandler', async (ctx) => {
+  try {
+    await ctx.answerCallbackQuery()
+
+    const userId = ctx.from?.id
+    if (!userId)
+      return
+
+    changeRoleState.set(userId, {})
+    await showUserSelection(ctx, userId)
+  }
+  catch (error) {
+    console.error('Error in changeRoleHandler:', error)
+    await ctx.answerCallbackQuery('حدث خطأ')
+  }
+})
+
 /**
  * بدء عملية تغيير الدور
  */

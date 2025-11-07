@@ -4,6 +4,7 @@ import { equipmentCategories, equipmentTypes, defaultShifts } from './seeds/equi
 import { departments } from './seeds/departments';
 import { positionsData } from './seeds/positions';
 import { seedEmployeesWithLeaves } from './seeds/employees-leaves';
+import { seedRealisticLeaves } from './seeds/realistic-leaves';
 
 const prisma = new PrismaClient();
 
@@ -159,6 +160,143 @@ async function seedEquipment() {
   console.log(`   - أنواع المعدات: ${typesCount}`);
 }
 
+async function seedFeatureConfigs() {
+  console.log('\n⚙️ بدء إضافة بيانات الوظائف والأقسام...');
+
+  // 1. إضافة/تحديث DepartmentConfig لقسم شئون العاملين
+  console.log('\n📂 إضافة تكوين الأقسام...');
+  
+  await prisma.departmentConfig.upsert({
+    where: { code: 'hr-management' },
+    update: {
+      name: 'شئون العاملين',
+      nameEn: 'HR Management',
+      icon: '👥',
+      description: 'إدارة شاملة للموارد البشرية',
+      isEnabled: true,
+      order: 2,
+      minRole: 'ADMIN',
+    },
+    create: {
+      code: 'hr-management',
+      name: 'شئون العاملين',
+      nameEn: 'HR Management',
+      icon: '👥',
+      description: 'إدارة شاملة للموارد البشرية',
+      isEnabled: true,
+      order: 2,
+      minRole: 'ADMIN',
+    },
+  });
+  console.log(`✅ تم إضافة: شئون العاملين (hr-management)`);
+
+  // 2. إضافة SubFeatureConfig لجميع الوظائف الفرعية
+  console.log('\n📋 إضافة الوظائف الفرعية...');
+
+  const subFeatures = [
+    {
+      code: 'hr:employees-list',
+      departmentCode: 'hr-management',
+      name: 'قوائم العاملين',
+      nameEn: 'Employees List',
+      icon: '📋',
+      description: 'إدارة بيانات العاملين الحاليين والسابقين',
+      isEnabled: true,
+      order: 1,
+      minRole: 'ADMIN',
+      superAdminOnly: false,
+    },
+    {
+      code: 'hr:advances',
+      departmentCode: 'hr-management',
+      name: 'السلف والمسحوبات',
+      nameEn: 'Advances',
+      icon: '💰',
+      description: 'إدارة السلف والمسحوبات المالية',
+      isEnabled: true,
+      order: 2,
+      minRole: 'ADMIN',
+      superAdminOnly: false,
+    },
+    {
+      code: 'hr:leaves',
+      departmentCode: 'hr-management',
+      name: 'الإجازات والماموريات',
+      nameEn: 'Leaves',
+      icon: '🏖️',
+      description: 'إدارة الإجازات والماموريات الرسمية',
+      isEnabled: true,
+      order: 3,
+      minRole: 'ADMIN',
+      superAdminOnly: false,
+    },
+    {
+      code: 'hr:payroll',
+      departmentCode: 'hr-management',
+      name: 'الرواتب والأجور',
+      nameEn: 'Payroll',
+      icon: '💵',
+      description: 'إدارة الرواتب والأجور (SUPER_ADMIN فقط)',
+      isEnabled: true,
+      order: 4,
+      minRole: 'SUPER_ADMIN',
+      superAdminOnly: true,
+    },
+    {
+      code: 'hr:custom-reports',
+      departmentCode: 'hr-management',
+      name: 'التقارير المخصصة',
+      nameEn: 'Custom Reports',
+      icon: '📊',
+      description: 'إنشاء تقارير احترافية مخصصة (SUPER_ADMIN فقط)',
+      isEnabled: true,
+      order: 5,
+      minRole: 'SUPER_ADMIN',
+      superAdminOnly: true,
+    },
+    {
+      code: 'hr:section-management',
+      departmentCode: 'hr-management',
+      name: 'إدارة قسم شئون العاملين',
+      nameEn: 'Section Management',
+      icon: '⚙️',
+      description: 'تعيين الأدمن وإدارة صلاحيات القسم والوظائف (SUPER_ADMIN فقط)',
+      isEnabled: true,
+      order: 6,
+      minRole: 'SUPER_ADMIN',
+      superAdminOnly: true,
+    },
+  ];
+
+  for (const subFeature of subFeatures) {
+    await prisma.subFeatureConfig.upsert({
+      where: { code: subFeature.code },
+      update: {
+        name: subFeature.name,
+        nameEn: subFeature.nameEn,
+        icon: subFeature.icon,
+        description: subFeature.description,
+        isEnabled: subFeature.isEnabled,
+        order: subFeature.order,
+        minRole: subFeature.minRole,
+        superAdminOnly: subFeature.superAdminOnly,
+      },
+      create: subFeature,
+    });
+    console.log(`✅ تم إضافة: ${subFeature.name} (${subFeature.code})`);
+  }
+
+  console.log(`\n✨ تم إضافة ${subFeatures.length} وظيفة فرعية بنجاح!`);
+  
+  // عرض الملخص
+  const departmentsCount = await prisma.departmentConfig.count();
+  const subFeaturesCount = await prisma.subFeatureConfig.count();
+  
+  console.log('\n📊 الملخص:');
+  console.log(`   - الأقسام: ${departmentsCount}`);
+  console.log(`   - الوظائف الفرعية: ${subFeaturesCount}`);
+}
+
 async function main() {
   console.log('🚀 بدء عملية Seeding...\n');
   
@@ -167,7 +305,9 @@ async function main() {
   await seedDepartments();
   await seedPositions();
   await seedEquipment();
-  await seedEmployeesWithLeaves();
+  await seedFeatureConfigs(); // إضافة تكوين الوظائف والأقسام
+  // await seedEmployeesWithLeaves();
+  await seedRealisticLeaves();
   
   // عرض الملخص النهائي
   console.log('\n' + '='.repeat(50));
@@ -180,6 +320,8 @@ async function main() {
     positions: await prisma.position.count(),
     equipmentCategories: await prisma.equipmentCategory.count(),
     equipmentTypes: await prisma.equipmentType.count(),
+    departmentConfigs: await prisma.departmentConfig.count(),
+    subFeatureConfigs: await prisma.subFeatureConfig.count(),
     employees: await prisma.employee.count(),
     leaves: await prisma.hR_EmployeeLeave.count(),
   };
@@ -189,6 +331,8 @@ async function main() {
   console.log(`✅ الوظائف: ${counts.positions}`);
   console.log(`✅ تصنيفات المعدات: ${counts.equipmentCategories}`);
   console.log(`✅ أنواع المعدات: ${counts.equipmentTypes}`);
+  console.log(`✅ تكوين الأقسام: ${counts.departmentConfigs}`);
+  console.log(`✅ تكوين الوظائف الفرعية: ${counts.subFeatureConfigs}`);
   console.log(`✅ العاملين: ${counts.employees}`);
   console.log(`✅ الإجازات: ${counts.leaves}`);
   console.log('='.repeat(50));

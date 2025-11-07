@@ -15,20 +15,32 @@ advancesHandler.callbackQuery(/^menu:sub:hr-management:advances$/, async (ctx) =
 
 async function handleAdvances(ctx: Context) {
   await ctx.answerCallbackQuery()
-  
+
+  const isSuperAdmin = ctx.dbUser?.role === 'SUPER_ADMIN'
+
   const keyboard = new InlineKeyboard()
-    .text('➕ تسجيل مسحوب جديد', 'hr:advances:new')
+    .text('➕ تسجيل عملية جديدة', 'hr:transactions:new')
     .row()
-    .text('📊 عرض مسحوبات عامل', 'hr:advances:view')
+    .text('📊 عرض عمليات عامل', 'hr:transactions:view')
     .row()
-    .text('📈 تقارير المسحوبات', 'hr:advances:reports')
+    .text('📈 تقارير العمليات', 'hr:transactions:reports')
     .row()
-    .text('⬅️ رجوع', 'menu:feature:hr-management')
+
+  // خيارات السوبر أدمين فقط
+  if (isSuperAdmin) {
+    keyboard
+      .text('⚙️ إدارة الأصناف العينية', 'hr:transactions:items')
+      .row()
+      .text('✅ التسويات', 'hr:transactions:settlements')
+      .row()
+  }
+
+  keyboard.text('⬅️ رجوع', 'menu:feature:hr-management')
 
   await ctx.editMessageText(
     '💰 **السلف والمسحوبات**\n\n'
-    + 'إدارة السلف والمسحوبات المالية\n\n'
+    + 'إدارة السلف المالية والمسحوبات العينية\n\n'
     + 'اختر من الخيارات التالية:',
-    { parse_mode: 'Markdown', reply_markup: keyboard }
+    { parse_mode: 'Markdown', reply_markup: keyboard },
   )
 }

@@ -75,6 +75,19 @@ export class RoleManager {
           reason,
         },
       }),
+      Database.prisma.auditLog.create({
+        data: {
+          model: 'User',
+          recordId: String(userId),
+          action: 'UPDATE',
+          category: 'SECURITY',
+          fieldName: 'role',
+          oldValue: String(user.role),
+          newValue: String(newRole),
+          changedByUserId: changedBy,
+          description: reason,
+        },
+      }),
     ])
   }
 
@@ -116,15 +129,31 @@ export class RoleManager {
       throw new Error('Insufficient permissions to ban users')
     }
 
-    await Database.prisma.user.update({
-      where: { id: userId },
-      data: {
-        isBanned: true,
-        bannedAt: new Date(),
-        bannedBy,
-        bannedReason: reason,
-      },
-    })
+    await Database.prisma.$transaction([
+      Database.prisma.user.update({
+        where: { id: userId },
+        data: {
+          isBanned: true,
+          bannedAt: new Date(),
+          bannedBy,
+          bannedReason: reason,
+        },
+      }),
+      Database.prisma.auditLog.create({
+        data: {
+          model: 'User',
+          recordId: String(userId),
+          action: 'UPDATE',
+          category: 'SECURITY',
+          fieldName: 'isBanned',
+          oldValue: 'false',
+          newValue: 'true',
+          changedByUserId: bannedBy,
+          description: reason,
+          metadata: { reason },
+        } as any,
+      }),
+    ])
   }
 
   /**
@@ -141,35 +170,75 @@ export class RoleManager {
       throw new Error('Insufficient permissions to unban users')
     }
 
-    await Database.prisma.user.update({
-      where: { id: userId },
-      data: {
-        isBanned: false,
-        bannedAt: null,
-        bannedBy: null,
-        bannedReason: null,
-      },
-    })
+    await Database.prisma.$transaction([
+      Database.prisma.user.update({
+        where: { id: userId },
+        data: {
+          isBanned: false,
+          bannedAt: null,
+          bannedBy: null,
+          bannedReason: null,
+        },
+      }),
+      Database.prisma.auditLog.create({
+        data: {
+          model: 'User',
+          recordId: String(userId),
+          action: 'UPDATE',
+          category: 'SECURITY',
+          fieldName: 'isBanned',
+          oldValue: 'true',
+          newValue: 'false',
+          changedByUserId: unbannedBy,
+        },
+      }),
+    ])
   }
 
   /**
    * Activate a user
    */
   static async activateUser(userId: number): Promise<void> {
-    await Database.prisma.user.update({
-      where: { id: userId },
-      data: { isActive: true },
-    })
+    await Database.prisma.$transaction([
+      Database.prisma.user.update({
+        where: { id: userId },
+        data: { isActive: true },
+      }),
+      Database.prisma.auditLog.create({
+        data: {
+          model: 'User',
+          recordId: String(userId),
+          action: 'UPDATE',
+          category: 'SYSTEM',
+          fieldName: 'isActive',
+          oldValue: 'false',
+          newValue: 'true',
+        },
+      }),
+    ])
   }
 
   /**
    * Deactivate a user
    */
   static async deactivateUser(userId: number): Promise<void> {
-    await Database.prisma.user.update({
-      where: { id: userId },
-      data: { isActive: false },
-    })
+    await Database.prisma.$transaction([
+      Database.prisma.user.update({
+        where: { id: userId },
+        data: { isActive: false },
+      }),
+      Database.prisma.auditLog.create({
+        data: {
+          model: 'User',
+          recordId: String(userId),
+          action: 'UPDATE',
+          category: 'SYSTEM',
+          fieldName: 'isActive',
+          oldValue: 'true',
+          newValue: 'false',
+        },
+      }),
+    ])
   }
 
   /**

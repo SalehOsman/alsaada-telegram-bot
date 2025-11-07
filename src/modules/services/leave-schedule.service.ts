@@ -1,5 +1,6 @@
 /**
- * خدمة حساب مواعيد الإجازات
+ * خدمة حساب مواعيد الإجازات - محدثة ومحسّنة
+ * تعمل مع نظام دورات العمل والإجازات
  */
 
 import { Database } from '#root/modules/database/index.js'
@@ -7,7 +8,12 @@ import { logger } from '#root/modules/services/logger/index.js'
 
 export class LeaveScheduleService {
   /**
-   * حساب موعد الإجازة القادمة للعامل
+   * حساب موعد الإجازة القادمة للعامل بشكل دقيق
+   *
+   * المنطق:
+   * - موظف جديد (لم يأخذ إجازة): hireDate + workDaysPerCycle
+   * - موظف له إجازة سابقة: actualReturnDate + workDaysPerCycle
+   * - يتعامل مع التواريخ الماضية
    */
   static async calculateNextLeave(employeeId: number): Promise<{
     startDate: Date
@@ -21,20 +27,48 @@ export class LeaveScheduleService {
           leaveDaysPerCycle: true,
           lastLeaveEndDate: true,
           hireDate: true,
+          isOnLeave: true,
         },
       })
 
+      // التحقق من البيانات الأساسية
       if (!employee || !employee.workDaysPerCycle || !employee.leaveDaysPerCycle) {
         return null
       }
 
-      // تاريخ البداية = آخر إجازة + أيام العمل + 1 (يوم العودة)
-      // إذا لم يحصل على إجازة من قبل، نستخدم تاريخ التعيين
-      const baseDate = employee.lastLeaveEndDate || employee.hireDate
-      const startDate = new Date(baseDate)
-      startDate.setDate(startDate.getDate() + employee.workDaysPerCycle + 1)
+      // إذا كان في إجازة حالياً، لا نحسب موعد جديد
+      if (employee.isOnLeave) {
+        return null
+      }
 
-      // تاريخ النهاية = البداية + أيام الإجازة - 1
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+
+      let baseDate: Date
+
+      // تحديد تاريخ البداية للحساب
+      if (employee.lastLeaveEndDate) {
+        // موظف له إجازة سابقة - نحسب من تاريخ آخر إجازة
+        baseDate = new Date(employee.lastLeaveEndDate)
+      }
+      else {
+        // موظف جديد - نحسب من تاريخ التعيين
+        baseDate = new Date(employee.hireDate)
+      }
+
+      baseDate.setHours(0, 0, 0, 0)
+
+      // حساب موعد الإجازة القادمة
+      const startDate = new Date(baseDate)
+      startDate.setDate(startDate.getDate() + employee.workDaysPerCycle)
+
+      // إذا كان التاريخ المحسوب في الماضي، نبدأ من اليوم
+      if (startDate < today) {
+        startDate.setTime(today.getTime())
+        startDate.setDate(startDate.getDate() + employee.workDaysPerCycle)
+      }
+
+      // حساب تاريخ النهاية
       const endDate = new Date(startDate)
       endDate.setDate(endDate.getDate() + employee.leaveDaysPerCycle - 1)
 
@@ -52,7 +86,7 @@ export class LeaveScheduleService {
   static async updateNextLeaveDate(employeeId: number): Promise<void> {
     try {
       const nextLeave = await this.calculateNextLeave(employeeId)
-      
+
       if (nextLeave) {
         await Database.prisma.employee.update({
           where: { id: employeeId },
@@ -61,10 +95,87 @@ export class LeaveScheduleService {
             nextLeaveEndDate: nextLeave.endDate,
           },
         })
+
+        logger.info({ employeeId, nextLeave }, 'Updated next leave date')
+      }
+      else {
+        // مسح البيانات إذا لم يكن هناك موعد محسوب
+        await Database.prisma.employee.update({
+          where: { id: employeeId },
+          data: {
+            nextLeaveStartDate: null,
+            nextLeaveEndDate: null,
+          },
+        })
       }
     }
     catch (error) {
       logger.error({ error, employeeId }, 'Error updating next leave date')
+    }
+  }
+
+  /**
+   * تحديث جميع الموظفين النشطين
+   */
+  static async updateAllEmployees(): Promise<{
+    updated: number
+    skipped: number
+    errors: number
+  }> {
+    try {
+      const employees = await Database.prisma.employee.findMany({
+        where: {
+          isActive: true,
+          isOnLeave: false,
+        },
+        select: { id: true, fullName: true },
+      })
+
+      let updated = 0
+      let skipped = 0
+      let errors = 0
+
+      logger.info(`🔄 بدء تحديث ${employees.length} موظف...`)
+
+      for (const employee of employees) {
+        try {
+          const nextLeave = await this.calculateNextLeave(employee.id)
+
+          if (nextLeave) {
+            await Database.prisma.employee.update({
+              where: { id: employee.id },
+              data: {
+                nextLeaveStartDate: nextLeave.startDate,
+                nextLeaveEndDate: nextLeave.endDate,
+              },
+            })
+            updated++
+          }
+          else {
+            // موظف بدون دورة محددة
+            await Database.prisma.employee.update({
+              where: { id: employee.id },
+              data: {
+                nextLeaveStartDate: null,
+                nextLeaveEndDate: null,
+              },
+            })
+            skipped++
+          }
+        }
+        catch (error) {
+          logger.error({ error, employeeId: employee.id }, 'Error updating employee')
+          errors++
+        }
+      }
+
+      logger.info({ updated, skipped, errors }, '✅ انتهى التحديث')
+
+      return { updated, skipped, errors }
+    }
+    catch (error) {
+      logger.error({ error }, 'Error updating all employees')
+      return { updated: 0, skipped: 0, errors: 0 }
     }
   }
 
@@ -76,7 +187,7 @@ export class LeaveScheduleService {
     const expectedReturn = new Date(leaveEndDate)
     expectedReturn.setDate(expectedReturn.getDate() + 1) // اليوم التالي للإجازة
     expectedReturn.setHours(0, 0, 0, 0)
-    
+
     const actual = new Date(actualReturnDate)
     actual.setHours(0, 0, 0, 0)
 
@@ -92,7 +203,7 @@ export class LeaveScheduleService {
   static calculateTotalDays(startDate: Date, endDate: Date): number {
     const start = new Date(startDate)
     const end = new Date(endDate)
-    
+
     start.setHours(0, 0, 0, 0)
     end.setHours(0, 0, 0, 0)
 
@@ -182,6 +293,10 @@ export class LeaveScheduleService {
 
   /**
    * الحصول على العاملين المتأخرين عن العودة
+   * ⚠️ فقط الإجازات التي:
+   *  - معتمدة (APPROVED)
+   *  - انتهت (endDate < اليوم)
+   *  - لم يتم تسجيل عودة فعلية (actualReturnDate = null)
    */
   static async getOverdueLeaves() {
     try {
@@ -194,6 +309,7 @@ export class LeaveScheduleService {
           endDate: {
             lt: today,
           },
+          actualReturnDate: null, // ✅ الشرط الأساسي: لم يتم تسجيل عودة
         },
         include: {
           employee: {

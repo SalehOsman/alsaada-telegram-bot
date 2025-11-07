@@ -33,6 +33,8 @@ export interface UserPermissionContext {
   role: Role
   isActive: boolean
   isBanned: boolean
+  bannedAt?: Date | null
+  bannedReason?: string | null
   customPermissions?: string[]
 }
 

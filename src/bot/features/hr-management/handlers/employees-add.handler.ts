@@ -23,23 +23,40 @@ function addTemporaryMessage(data: EmployeeFormData, messageId: number) {
 }
 
 // ============================================
-// 🗑️ حذف الرسائل المؤقتة من الشات
+// 💬 إرسال رسالة مع تتبع تلقائي
 // ============================================
-async function deleteTemporaryMessages(ctx: any, messageIds: number[]) {
-  try {
-    for (const messageId of messageIds) {
-      try {
-        await ctx.api.deleteMessage(ctx.chat.id, messageId)
-      }
-      catch (error) {
-        // تجاهل الأخطاء في حذف الرسائل
-        console.log(`Could not delete message ${messageId}:`, error)
-      }
+async function sendTrackedReply(ctx: any, data: EmployeeFormData, text: string, options?: any) {
+  // تتبع رسالة المستخدم إذا كانت موجودة
+  if (ctx.message?.message_id) {
+    addTemporaryMessage(data, ctx.message.message_id)
+  }
+
+  const botMsg = await ctx.reply(text, options)
+
+  // تتبع رسالة البوت
+  if (typeof botMsg === 'object' && 'message_id' in botMsg) {
+    addTemporaryMessage(data, botMsg.message_id)
+  }
+
+  return botMsg
+}
+
+// ============================================
+// 🗑️ حذف جميع الرسائل في نطاق معين
+// ============================================
+async function deleteAllMessagesBetween(ctx: any, startMessageId: number, endMessageId: number) {
+  console.error(`🗑️ حذف جميع الرسائل من ${startMessageId} إلى ${endMessageId - 1}`)
+
+  for (let msgId = startMessageId; msgId < endMessageId; msgId++) {
+    try {
+      await ctx.api.deleteMessage(ctx.chat.id, msgId)
+    }
+    catch {
+      // تجاهل الأخطاء
     }
   }
-  catch (error) {
-    console.error('Error deleting temporary messages:', error)
-  }
+
+  console.error(`✅ انتهى حذف الرسائل`)
 }
 
 // ============================================
@@ -61,6 +78,7 @@ interface EmployeeFormData {
   idCardFront?: string
   idCardBack?: string
   temporaryMessageIds?: number[] // تتبع الرسائل المؤقتة
+  startMessageId?: number // رسالة بداية التدفق
 }
 
 const formData = new Map<number, EmployeeFormData>()
@@ -76,12 +94,10 @@ addEmployeeHandler.callbackQuery(/^hr:employees:add$/, async (ctx) => {
     if (!userId)
       return
 
-    formData.set(userId, { step: 'fullName' })
-
     const keyboard = new InlineKeyboard()
       .text('❌ إلغاء', 'employeesListHandler')
 
-    await ctx.editMessageText(
+    const editedMsg = await ctx.editMessageText(
       '📝 **إضافة موظف جديد**\n\n'
       + '**الخطوة 1/7:** الاسم الكامل\n\n'
       + 'يرجى إدخال الاسم الكامل للموظف:',
@@ -90,6 +106,17 @@ addEmployeeHandler.callbackQuery(/^hr:employees:add$/, async (ctx) => {
         reply_markup: keyboard,
       },
     )
+
+    // حفظ رقم رسالة البداية
+    const startMsgId = typeof editedMsg === 'object' && 'message_id' in editedMsg
+      ? editedMsg.message_id
+      : (ctx.callbackQuery?.message as any)?.message_id || 0
+
+    formData.set(userId, {
+      step: 'fullName',
+      temporaryMessageIds: [startMsgId],
+      startMessageId: startMsgId,
+    })
   }
   catch (error) {
     console.error('Error in add employee start:', error)
@@ -118,7 +145,7 @@ addEmployeeHandler.on('message:text', async (ctx, next) => {
       // ============================================
       case 'fullName': {
         if (!isValidName(text) || text.length < 2) {
-          await ctx.reply('❌ الاسم غير صالح. يرجى إدخال اسم صحيح.')
+          await sendTrackedReply(ctx, data, '❌ الاسم غير صالح. يرجى إدخال اسم صحيح.')
           return
         }
 
@@ -132,7 +159,9 @@ addEmployeeHandler.on('message:text', async (ctx, next) => {
         const keyboard = new InlineKeyboard()
           .text('⏭️ توليد تلقائي', 'skip:nickname')
 
-        await ctx.reply(
+        await sendTrackedReply(
+          ctx,
+          data,
           '📝 **إضافة موظف جديد**\n\n'
           + '**الخطوة 2/7:** اسم الشهرة\n\n'
           + 'يرجى إدخال اسم الشهرة أو اضغط توليد تلقائي:',
@@ -150,7 +179,7 @@ addEmployeeHandler.on('message:text', async (ctx, next) => {
       case 'nickname': {
         // التحقق من صحة اسم الشهرة
         if (!isValidNickname(text)) {
-          await ctx.reply('❌ اسم الشهرة غير صحيح. يرجى إدخال اسم صحيح (بدون أرقام أو رموز خاصة).')
+          await sendTrackedReply(ctx, data, '❌ اسم الشهرة غير صحيح. يرجى إدخال اسم صحيح (بدون أرقام أو رموز خاصة).')
           return
         }
 
@@ -170,7 +199,7 @@ addEmployeeHandler.on('message:text', async (ctx, next) => {
         })
 
         if (positions.length === 0) {
-          await ctx.reply('❌ لا توجد وظائف متاحة حالياً. يرجى إضافة وظائف أولاً.')
+          await sendTrackedReply(ctx, data, '❌ لا توجد وظائف متاحة حالياً. يرجى إضافة وظائف أولاً.')
           return
         }
 
@@ -201,7 +230,9 @@ addEmployeeHandler.on('message:text', async (ctx, next) => {
         // إضافة زر الإلغاء
         keyboard.row({ text: '❌ إلغاء', callback_data: 'employeesListHandler' })
 
-        await ctx.reply(
+        await sendTrackedReply(
+          ctx,
+          data,
           '📝 **إضافة موظف جديد**\n\n'
           + '**الخطوة 3/7:** اختيار الوظيفة\n\n'
           + 'يرجى اختيار الوظيفة المناسبة للموظف:',
@@ -967,7 +998,7 @@ addEmployeeHandler.callbackQuery('confirm:save:employee', async (ctx) => {
     const governorateName = governorate ? governorate.nameAr : 'غير محدد'
 
     // إعداد رسالة التفاصيل الكاملة
-    let fullDetailsMessage
+    const fullDetailsMessage
       = '✅ تم تسجيل موظف جديد بنجاح!\n\n'
         + '━━━━━━━━━━━━━━━━━━━━\n\n'
         + '📋 البيانات الأساسية:\n'
@@ -988,14 +1019,17 @@ addEmployeeHandler.callbackQuery('confirm:save:employee', async (ctx) => {
         + `📅 تاريخ بدء العمل: ${new Date(data.startDate!).toLocaleDateString('ar-EG')}\n`
         + `✅ الحالة: نشط\n\n`
         + '📁 المرفقات:\n'
-      + `${idCardFrontPath ? '✅ بطاقة الرقم القومي (الوجه الأمامي)\n' : '❌ لم يتم رفع بطاقة الرقم القومي (الوجه الأمامي)\n'}`
-      + `${idCardBackPath ? '✅ بطاقة الرقم القومي (الوجه الخلفي)\n' : '❌ لم يتم رفع بطاقة الرقم القومي (الوجه الخلفي)\n'}\n`
-      + '━━━━━━━━━━━━━━━━━━━━\n\n'
-      + '🎉 مرحباً بالعضو الجديد في فريق العمل!'
+        + `${idCardFrontPath ? '✅ بطاقة الرقم القومي (الوجه الأمامي)\n' : '❌ لم يتم رفع بطاقة الرقم القومي (الوجه الأمامي)\n'}`
+        + `${idCardBackPath ? '✅ بطاقة الرقم القومي (الوجه الخلفي)\n' : '❌ لم يتم رفع بطاقة الرقم القومي (الوجه الخلفي)\n'}\n`
+        + '━━━━━━━━━━━━━━━━━━━━\n\n'
+        + '🎉 مرحباً بالعضو الجديد في فريق العمل!'
 
-    // حذف الرسائل المؤقتة من الشات
-    if (data.temporaryMessageIds && data.temporaryMessageIds.length > 0) {
-      await deleteTemporaryMessages(ctx, data.temporaryMessageIds)
+    // حذف جميع الرسائل من بداية التدفق حتى الآن
+    if (data.startMessageId) {
+      // نحاول الحصول على آخر رسالة في الشات (سنستخدم رقم كبير)
+      const endMsgId = data.startMessageId + 200 // افتراض أن التدفق لن يتجاوز 200 رسالة
+      console.error(`🗑️ حذف جميع الرسائل من ${data.startMessageId} إلى ${endMsgId}`)
+      await deleteAllMessagesBetween(ctx, data.startMessageId, endMsgId)
     }
 
     // إرسال الرسالة النهائية مع أزرار التنقل
@@ -1119,15 +1153,21 @@ async function sendReportToAdmins(ctx: any, employee: any, positionName: string,
   try {
     const prisma = Database.prisma
 
-    // جلب جميع الأدمن
+    // جلب جميع الأدمن (تجنب إرسال الرسالة للشخص نفسه)
+    const currentUserId = ctx.from?.id
     const admins = await prisma.user.findMany({
       where: {
         role: {
           in: ['SUPER_ADMIN', 'ADMIN'],
         },
         isActive: true,
+        NOT: {
+          telegramId: currentUserId?.toString(),
+        },
       },
     })
+
+    console.error(`📊 عدد الأدمن المستهدفين: ${admins.length}`)
 
     const reportMessage
       = '📊 **تقرير إضافة موظف جديد**\n\n'
@@ -1142,17 +1182,21 @@ async function sendReportToAdmins(ctx: any, employee: any, positionName: string,
         + '━━━━━━━━━━━━━━━━━━━━\n\n'
         + '📝 تم إضافة موظف جديد إلى النظام'
 
-    // إرسال الرسالة لجميع الأدمن
+    // إرسال الرسالة لجميع الأدمن (عدا الشخص الحالي)
+    let sentCount = 0
     for (const admin of admins) {
       try {
-        await ctx.api.sendMessage(admin.telegramId, reportMessage, { parse_mode: 'Markdown' })
+        await ctx.api.sendMessage(Number(admin.telegramId), reportMessage, { parse_mode: 'Markdown' })
+        sentCount++
+        console.error(`✅ تم إرسال التقرير إلى: ${admin.telegramId}`)
       }
       catch (error) {
-        console.error(`Error sending report to admin ${admin.telegramId}:`, error)
+        console.error(`❌ فشل الإرسال إلى ${admin.telegramId}:`, error)
       }
     }
+    console.error(`📤 تم إرسال التقرير إلى ${sentCount} أدمن من ${admins.length}`)
   }
   catch (error) {
-    console.error('Error sending reports to admins:', error)
+    console.error('❌ خطأ في إرسال التقارير للأدمن:', error)
   }
 }

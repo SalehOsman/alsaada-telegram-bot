@@ -6,7 +6,7 @@ export const viewPreviousEmployeesHandler = new Composer<Context>()
 
 viewPreviousEmployeesHandler.callbackQuery('hr:employees:view-previous', async (ctx) => {
   await ctx.answerCallbackQuery()
-  
+
   try {
     const keyboard = new InlineKeyboard()
       .text('🏢 حسب القسم', 'filter:prev:by-department')
@@ -15,7 +15,7 @@ viewPreviousEmployeesHandler.callbackQuery('hr:employees:view-previous', async (
       .text('💼 حسب الوظيفة', 'filter:prev:by-position')
       .text('📊 حسب سبب الخروج', 'filter:prev:by-exit-reason')
       .row()
-      .text('👥 الكل (بدون تصفية)', 'filter:prev:all')
+      .text('👥 عرض جميع العاملين السابقين', 'filter:prev:all')
       .row()
       .text('📥 تصدير الكل Excel', 'export:previous-all')
       .row()

@@ -204,6 +204,8 @@ model User {
   roleChangedBy                            RoleChange[]             @relation("ChangedByUser")
   roleChanges                              RoleChange[]             @relation("UserRoleChanges")
   auditLogs                                AuditLog[]               @relation("UserAuditLogs")
+  assignedDepartments                      DepartmentAdmin[]        @relation("UserDepartments")
+  assignedSubFeatures                      SubFeatureAdmin[]        @relation("UserSubFeatures")
 
   @@index([isActive])
   @@index([role])
@@ -352,16 +354,16 @@ model Notification {
 }
 
 model NotificationRecipient {
-  id             Int          @id @default(autoincrement())
+  id             Int           @id @default(autoincrement())
   notificationId String
   userId         Int
   status         GeneralStatus @default(PENDING)
   sentAt         DateTime?
   failureReason  String?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notification   Notification  @relation(fields: [notificationId], references: [id], onDelete: Cascade)
 
   @@unique([notificationId, userId])
   @@index([notificationId])
@@ -454,22 +456,25 @@ model Department {
 }
 
 model Position {
-  id           Int        @id @default(autoincrement())
-  title        String
-  titleAr      String
-  code         String     @unique
-  description  String?
-  departmentId Int
-  orderIndex   Int        @default(0)
-  isActive     Boolean    @default(true)
+  id                       Int        @id @default(autoincrement())
+  title                    String
+  titleAr                  String
+  code                     String     @unique
+  description              String?
+  departmentId             Int
+  orderIndex               Int        @default(0)
+  isActive                 Boolean    @default(true)
   defaultWorkDaysPerCycle  Int?
   defaultLeaveDaysPerCycle Int?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-  createdBy    Int?
-  updatedBy    Int?
-  employees    Employee[]
-  department   Department @relation(fields: [departmentId], references: [id])
+  createdAt                DateTime   @default(now())
+  updatedAt                DateTime   @updatedAt
+  createdBy                Int?
+  updatedBy                Int?
+  employees                Employee[]
+  department               Department @relation(fields: [departmentId], references: [id])
+
+  // نظام الرواتب الجديد
+  positionAllowances HR_PositionAllowance[] @relation("PositionAllowances")
 
   @@index([code])
   @@index([departmentId])
@@ -503,12 +508,12 @@ model Governorate {
 }
 
 model Employee {
-  id                       Int               @id @default(autoincrement())
-  employeeCode             String            @unique
+  id                       Int                   @id @default(autoincrement())
+  employeeCode             String                @unique
   fullName                 String
   fullNameEn               String?
   nickname                 String?
-  nationalId               String            @unique
+  nationalId               String                @unique
   passportNumber           String?
   gender                   Gender
   dateOfBirth              DateTime
@@ -531,24 +536,24 @@ model Employee {
   governorateId            Int?
   city                     String
   region                   String?
-  country                  String            @default("Egypt")
+  country                  String                @default("Egypt")
   postalCode               String?
   companyId                Int
   departmentId             Int
   positionId               Int
   employmentType           EmploymentType
   contractType             ContractType
-  employmentStatus         EmploymentStatus  @default(ACTIVE)
+  employmentStatus         EmploymentStatus      @default(ACTIVE)
   hireDate                 DateTime
   confirmationDate         DateTime?
   resignationDate          DateTime?
   terminationDate          DateTime?
   terminationReason        String?
   basicSalary              Float
-  allowances               Float?            @default(0)
+  allowances               Float?                @default(0)
   totalSalary              Float
-  currency                 String            @default("EGP")
-  paymentMethod            PaymentMethod     @default(BANK_TRANSFER)
+  currency                 String                @default("EGP")
+  paymentMethod            PaymentMethod         @default(BANK_TRANSFER)
   bankName                 String?
   bankAccountNumber        String?
   iban                     String?
@@ -559,6 +564,7 @@ model Employee {
   socialInsuranceNumber    String?
   taxNumber                String?
   insuranceStartDate       DateTime?
+  salaryCalculationType    SalaryCalculationType @default(MONTHLY)
   directManagerId          Int?
   workSchedule             String?
   workLocation             String?
@@ -566,60 +572,66 @@ model Employee {
   major                    String?
   university               String?
   graduationYear           Int?
-  yearsOfExperience        Int?              @default(0)
+  yearsOfExperience        Int?                  @default(0)
   profilePhoto             String?
   cv                       String?
   nationalIdCardUrl        String?
-  annualLeaveBalance       Int               @default(21)
-  sickLeaveBalance         Int               @default(180)
-  casualLeaveBalance        Int               @default(7)
-  attendanceRequired       Boolean           @default(false)
+  annualLeaveBalance       Int                   @default(21)
+  sickLeaveBalance         Int                   @default(180)
+  casualLeaveBalance       Int                   @default(7)
+  attendanceRequired       Boolean               @default(false)
   workDaysPerCycle         Int?
   leaveDaysPerCycle        Int?
-  currentWorkDays          Int?              @default(0)
-  currentLeaveDays         Int?              @default(0)
+  hasCustomCycle           Boolean               @default(false)
+  currentWorkDays          Int?                  @default(0)
+  currentLeaveDays         Int?                  @default(0)
   lastLeaveStartDate       DateTime?
   lastLeaveEndDate         DateTime?
   nextLeaveStartDate       DateTime?
   nextLeaveEndDate         DateTime?
-  isOnLeave                Boolean           @default(false)
-  isOnMission              Boolean           @default(false)
+  isOnLeave                Boolean               @default(false)
+  isOnMission              Boolean               @default(false)
   currentLeaveId           Int?
   currentMissionId         Int?
-  totalLeaveDays           Int               @default(0)
-  totalDelayDays           Int               @default(0)
+  totalLeaveDays           Int                   @default(0)
+  totalDelayDays           Int                   @default(0)
   fingerprintId            String?
   notes                    String?
-  isActive                 Boolean           @default(true)
-  createdAt                DateTime          @default(now())
-  updatedAt                DateTime          @updatedAt
+  isActive                 Boolean               @default(true)
+  createdAt                DateTime              @default(now())
+  updatedAt                DateTime              @updatedAt
   createdBy                Int?
   updatedBy                Int?
 
-  operatedEquipment        Equipment[]       @relation("EquipmentOperator")
-  fuelLogs                 FuelLog[]         @relation("FuelOperator")
-  performedMaintenance     MaintenanceRecord[] @relation("MaintenancePerformer")
-  shiftAssignments         ShiftAssignment[]   @relation("ShiftOperator")
-  equipmentUsages          EquipmentUsage[]    @relation("UsageOperator")
-  attendanceExceptions     HR_AttendanceException[]
-  directManager            Employee?         @relation("ManagerSubordinates", fields: [directManagerId], references: [id])
-  subordinates             Employee[]        @relation("ManagerSubordinates")
-  position                 Position          @relation(fields: [positionId], references: [id])
-  department               Department        @relation(fields: [departmentId], references: [id])
-  company                  Company           @relation(fields: [companyId], references: [id])
-  governorate              Governorate?      @relation("EmployeeGovernorate", fields: [governorateId], references: [id])
-  advances                 HR_EmployeeAdvance[] @relation("EmployeeAdvances")
-  leaveReplacements        HR_EmployeeLeave[] @relation("LeaveReplacements")
-  leaves                   HR_EmployeeLeave[] @relation("EmployeeLeaves")
-  missions                 HR_EmployeeMission[] @relation("EmployeeMissions")
-  leaveAllowances          HR_LeaveAllowance[] @relation("EmployeeAllowances")
-  payrolls                 HR_MonthlyPayroll[] @relation("EmployeePayrolls")
-  rotations                HR_WorkRotation[]   @relation("EmployeeRotations")
+  operatedEquipment    Equipment[]              @relation("EquipmentOperator")
+  fuelLogs             FuelLog[]                @relation("FuelOperator")
+  performedMaintenance MaintenanceRecord[]      @relation("MaintenancePerformer")
+  shiftAssignments     ShiftAssignment[]        @relation("ShiftOperator")
+  equipmentUsages      EquipmentUsage[]         @relation("UsageOperator")
+  directManager        Employee?                @relation("ManagerSubordinates", fields: [directManagerId], references: [id])
+  subordinates         Employee[]               @relation("ManagerSubordinates")
+  position             Position                 @relation(fields: [positionId], references: [id])
+  department           Department               @relation(fields: [departmentId], references: [id])
+  company              Company                  @relation(fields: [companyId], references: [id])
+  governorate          Governorate?             @relation("EmployeeGovernorate", fields: [governorateId], references: [id])
+  leaveReplacements    HR_EmployeeLeave[]       @relation("LeaveReplacements")
+  leaves               HR_EmployeeLeave[]       @relation("EmployeeLeaves")
+  missions             HR_EmployeeMission[]     @relation("EmployeeMissions")
+  leaveAllowances      HR_LeaveAllowance[]      @relation("EmployeeAllowances")
+  transactions         HR_Transaction[]         @relation("EmployeeTransactions")
 
-  skills                   Skill[]
-  certifications           Certification[]
-  documents                Document[]
-  workHistory              WorkExperience[]
+  // نظام الرواتب الجديد
+  employeeAllowances HR_EmployeeAllowance[] @relation("EmployeeAllowances")
+  payrollRecords     HR_PayrollRecord[]     @relation("EmployeePayrollRecords")
+  monthlyPayrolls    HR_MonthlyPayroll[]    @relation("EmployeeMonthlyPayrolls")
+
+  // نظام عقوبات التأخير
+  appliedPenalties HR_AppliedPenalty[] @relation("EmployeeAppliedPenalties")
+
+  skills         Skill[]
+  certifications Certification[]
+  documents      Document[]
+  workHistory    WorkExperience[]
 
   @@index([employeeCode])
   @@index([nationalId])
@@ -667,7 +679,7 @@ model Document {
 }
 
 model Certification {
-  id           Int      @id @default(autoincrement())
+  id           Int       @id @default(autoincrement())
   name         String
   issuingOrg   String
   issueDate    DateTime
@@ -675,71 +687,58 @@ model Certification {
   credentialId String?
   url          String?
   employeeId   Int
-  employee     Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employee     Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@index([employeeId])
   @@map("HR_Certification")
 }
 
 model WorkExperience {
-  id          Int      @id @default(autoincrement())
+  id          Int       @id @default(autoincrement())
   companyName String
   position    String
   startDate   DateTime
   endDate     DateTime?
   description String?
   employeeId  Int
-  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@index([employeeId])
   @@map("HR_WorkExperience")
 }
 
-model HR_WorkRotation {
-  id           Int           @id @default(autoincrement())
-  employeeId   Int
-  rotationType String
-  startDate    DateTime
-  endDate      DateTime
-  status       GeneralStatus @default(PLANNED)
-  location     String?
-  notes        String?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  employee     Employee      @relation("EmployeeRotations", fields: [employeeId], references: [id], onDelete: Cascade)
-
-  @@index([employeeId])
-  @@index([status])
-  @@index([startDate, endDate])
-}
-
 model HR_EmployeeLeave {
-  id                 Int           @id @default(autoincrement())
-  leaveNumber        String        @unique
-  employeeId         Int
-  leaveType          LeaveType     @default(REGULAR)
-  startDate          DateTime
-  endDate            DateTime
-  totalDays          Int
-  reason             String?
-  status             GeneralStatus @default(PENDING)
-  isActive           Boolean       @default(true)
-  actualReturnDate   DateTime?
-  delayDays          Int           @default(0)
-  isPostponed        Boolean       @default(false)
-  postponedTimes     Int           @default(0)
-  allowanceAmount    Float?
-  allowanceSettled   Boolean       @default(false)
-  medicalReportPath  String?
-  affectsNextLeave   Boolean       @default(true)
-  replacementId      Int?
-  approvedBy         Int?
-  approvedAt         DateTime?
-  rejectionReason    String?
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
-  replacement        Employee?     @relation("LeaveReplacements", fields: [replacementId], references: [id])
-  employee           Employee      @relation("EmployeeLeaves", fields: [employeeId], references: [id], onDelete: Cascade)
+  id                Int                 @id @default(autoincrement())
+  leaveNumber       String              @unique
+  employeeId        Int
+  leaveType         LeaveType           @default(REGULAR)
+  settlementType    LeaveSettlementType @default(ACTUAL_LEAVE) // نوع التسوية: فعلية أو نقدية
+  startDate         DateTime
+  endDate           DateTime
+  totalDays         Int
+  reason            String?
+  status            GeneralStatus       @default(PENDING)
+  isActive          Boolean             @default(true)
+  actualReturnDate  DateTime?
+  delayDays         Int                 @default(0)
+  isPostponed       Boolean             @default(false)
+  postponedTimes    Int                 @default(0)
+  allowanceAmount   Float?              // مبلغ البدل النقدي (للتسوية النقدية)
+  allowanceSettled  Boolean             @default(false)
+  allowancePaidDate DateTime?           // تاريخ صرف البدل
+  medicalReportPath String?
+  affectsNextLeave  Boolean             @default(true)
+  replacementId     Int?
+  approvedBy        Int?
+  approvedAt        DateTime?
+  rejectionReason   String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  replacement       Employee?     @relation("LeaveReplacements", fields: [replacementId], references: [id])
+  employee          Employee      @relation("EmployeeLeaves", fields: [employeeId], references: [id], onDelete: Cascade)
+
+  // العقوبات المطبقة على هذه الإجازة
+  appliedPenalties HR_AppliedPenalty[] @relation("LeaveAppliedPenalties")
 
   @@index([employeeId])
   @@index([leaveNumber])
@@ -750,77 +749,308 @@ model HR_EmployeeLeave {
   @@index([employeeId, isActive])
 }
 
-model HR_EmployeeAdvance {
-  id                 Int            @id @default(autoincrement())
-  employeeId         Int
-  amount             Float
-  reason             String?
-  requestDate        DateTime       @default(now())
-  approvalStatus     ApprovalStatus @default(PENDING)
-  approvedBy         Int?
-  approvedAt         DateTime?
-  deductionStartDate DateTime?
-  monthlyDeduction   Float?
-  remainingBalance   Float?
-  isPaid             Boolean        @default(false)
-  notes              String?
-  createdAt          DateTime       @default(now())
-  updatedAt          DateTime       @updatedAt
-  employee           Employee       @relation("EmployeeAdvances", fields: [employeeId], references: [id], onDelete: Cascade)
+// ============================================
+// نظام الرواتب والأجور - Payroll System
+// ============================================
 
-  @@index([employeeId])
-  @@index([approvalStatus])
-  @@index([isPaid])
+// 1️⃣ أنواع البدلات (Allowance Types)
+model HR_AllowanceType {
+  id                 Int                    @id @default(autoincrement())
+  code               String                 @unique // "TRANSPORT", "VACATION", "OVERTIME", "OTHER"
+  nameAr             String // "بدل انتقال"
+  nameEn             String? // "Transportation Allowance"
+  description        String?
+  isActive           Boolean                @default(true)
+  orderIndex         Int                    @default(0)
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  positionAllowances HR_PositionAllowance[]
+  employeeAllowances HR_EmployeeAllowance[]
+
+  @@index([code])
+  @@index([isActive])
+  @@index([orderIndex])
+  @@map("HR_AllowanceType")
 }
 
+// 2️⃣ بدلات الوظائف (Position Allowances) - الافتراضي
+model HR_PositionAllowance {
+  id              Int              @id @default(autoincrement())
+  positionId      Int
+  allowanceTypeId Int
+  amount          Float // المبلغ الشهري
+  isActive        Boolean          @default(true)
+  notes           String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  createdBy       BigInt?
+  updatedBy       BigInt?
+  position        Position         @relation("PositionAllowances", fields: [positionId], references: [id], onDelete: Cascade)
+  allowanceType   HR_AllowanceType @relation(fields: [allowanceTypeId], references: [id])
+
+  @@unique([positionId, allowanceTypeId])
+  @@index([positionId])
+  @@index([allowanceTypeId])
+  @@index([isActive])
+  @@map("HR_PositionAllowance")
+}
+
+// 3️⃣ بدلات الموظفين (Employee Allowances) - استثناءات خاصة
+model HR_EmployeeAllowance {
+  id               Int              @id @default(autoincrement())
+  employeeId       Int
+  allowanceTypeId  Int
+  amount           Float // المبلغ الشهري
+  overridePosition Boolean          @default(true) // يلغي بدل الوظيفة
+  startDate        DateTime? // تاريخ البداية
+  endDate          DateTime? // تاريخ النهاية (NULL = دائم)
+  isActive         Boolean          @default(true)
+  reason           String? // سبب البدل الخاص
+  notes            String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  createdBy        BigInt?
+  updatedBy        BigInt?
+  employee         Employee         @relation("EmployeeAllowances", fields: [employeeId], references: [id], onDelete: Cascade)
+  allowanceType    HR_AllowanceType @relation(fields: [allowanceTypeId], references: [id])
+
+  @@index([employeeId])
+  @@index([allowanceTypeId])
+  @@index([isActive])
+  @@index([startDate, endDate])
+  @@map("HR_EmployeeAllowance")
+}
+
+// 4️⃣ استحقاقات المسحوبات العينية (Material Entitlements)
+model HR_MaterialEntitlement {
+  id            Int            @id @default(autoincrement())
+  targetType    String // "POSITION" أو "EMPLOYEE"
+  targetId      Int // positionId أو employeeId
+  itemId        Int // معرف الصنف من HR_AdvanceItem
+  dailyQuantity Float // الكمية المستحقة يومياً
+  isActive      Boolean        @default(true)
+  notes         String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  createdBy     BigInt?
+  updatedBy     BigInt?
+  item          HR_AdvanceItem @relation("ItemEntitlements", fields: [itemId], references: [id])
+
+  @@unique([targetType, targetId, itemId])
+  @@index([targetType, targetId])
+  @@index([itemId])
+  @@index([isActive])
+  @@map("HR_MaterialEntitlement")
+}
+
+// 5️⃣ المكافآت الشهرية (Monthly Bonuses)
+model HR_Bonus {
+  id             Int       @id @default(autoincrement())
+  bonusType      String // "INDIVIDUAL" (موظف), "POSITION" (وظيفة), "ALL" (الكل)
+  targetId       Int? // employeeId أو positionId (NULL للكل)
+  bonusName      String // اسم المكافأة (مرن): "إضافي"، "مكافأة مجهودات"، "بدل تميز"، إلخ
+  amount         Float
+  description    String? // وصف إضافي (اختياري)
+  startDate      DateTime // تاريخ البداية
+  durationMonths Int? // عدد الأشهر (NULL = دائم، 1 = شهر واحد، 2 = شهرين، إلخ)
+  isActive       Boolean   @default(true)
+  notes          String? // ملاحظات
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  createdBy      BigInt?
+  approvedBy     BigInt?
+  approvedAt     DateTime?
+
+  @@index([bonusType])
+  @@index([targetId])
+  @@index([isActive])
+  @@index([startDate])
+  @@index([durationMonths])
+  @@map("HR_Bonus")
+}
+
+// سجل كشوف الرواتب المحفوظة (للتقارير)
+model HR_PayrollRecord {
+  id            Int     @id @default(autoincrement())
+  employeeId    Int
+  employeeCode  String
+  employeeName  String
+  positionTitle String?
+
+  // الفترة
+  month           Int // 1-12
+  year            Int
+  periodStartDate DateTime
+  periodEndDate   DateTime
+  settlementType  String // 'today', 'half_first', 'half_second', 'full_month', 'termination', 'last_leave'
+
+  // أيام العمل
+  totalDays Int // إجمالي أيام الفترة
+  workDays  Int // أيام العمل الفعلية
+  leaveDays Int @default(0)
+
+  // المستحقات
+  basicSalary       Float @default(0)
+  totalAllowances   Float @default(0)
+  totalBonuses      Float @default(0)
+  materialAllowance Float @default(0)
+  grossSalary       Float // إجمالي المستحقات
+
+  // الخصومات
+  cashAdvances      Float @default(0)
+  itemWithdrawals   Float @default(0)
+  absenceDeductions Float @default(0)
+  otherDeductions   Float @default(0)
+  totalDeductions   Float
+
+  // النتيجة
+  netSalary Float // الصافي
+
+  // تفاصيل إضافية (JSON)
+  allowancesDetails Json? // تفاصيل البدلات
+  bonusesDetails    Json? // تفاصيل المكافآت
+  deductionsDetails Json? // تفاصيل الخصومات
+
+  // حالة السداد
+  paymentStatus String    @default("UNPAID") // PAID, UNPAID, PARTIAL
+  amountPaid    Float     @default(0) // المبلغ المدفوع فعلياً
+  paymentDate   DateTime? // تاريخ الدفع
+  paymentNotes  String? // ملاحظات الدفع
+
+  // حالة السجل
+  isDeleted    Boolean   @default(false) // للحذف المنطقي
+  deletedAt    DateTime?
+  deletedBy    BigInt?
+  deleteReason String?
+
+  // معلومات التسجيل
+  createdAt DateTime @default(now())
+  createdBy BigInt?
+  updatedAt DateTime @default(now()) @updatedAt
+  updatedBy BigInt?
+
+  employee  Employee             @relation("EmployeePayrollRecords", fields: [employeeId], references: [id], onDelete: Cascade)
+  auditLogs HR_PayrollAuditLog[]
+
+  // العقوبات المطبقة على هذا الراتب
+  appliedPenalties HR_AppliedPenalty[] @relation("PayrollAppliedPenalties")
+
+  @@unique([employeeId, month, year]) // منع التكرار لنفس الموظف في نفس الشهر
+  @@index([employeeId])
+  @@index([month, year])
+  @@index([createdAt])
+  @@index([paymentStatus])
+  @@map("HR_PayrollRecord")
+}
+
+// سجل التدقيق لكشوف الرواتب
+model HR_PayrollAuditLog {
+  id              Int      @id @default(autoincrement())
+  payrollRecordId Int
+  action          String // CREATED, UPDATED, DELETED, PAYMENT_UPDATED, PAYMENT_CONFIRMED
+  actionBy        BigInt
+  actionAt        DateTime @default(now())
+
+  // البيانات قبل التغيير
+  oldData Json?
+  // البيانات بعد التغيير
+  newData Json?
+
+  // تفاصيل إضافية
+  changes   Json? // التغييرات المحددة
+  notes     String?
+  ipAddress String?
+
+  payrollRecord HR_PayrollRecord @relation(fields: [payrollRecordId], references: [id], onDelete: Cascade)
+
+  @@index([payrollRecordId])
+  @@index([actionBy])
+  @@index([actionAt])
+  @@map("HR_PayrollAuditLog")
+}
+
+// نظام الرواتب الشهرية الجماعي
 model HR_MonthlyPayroll {
-  id                 Int           @id @default(autoincrement())
-  employeeId         Int
-  month              Int
-  year               Int
-  basicSalary        Float
-  housingAllowance   Float         @default(0)
-  transportAllowance Float         @default(0)
-  foodAllowance      Float         @default(0)
-  fieldAllowance     Float         @default(0)
-  otherAllowances    Float         @default(0)
-  advances           Float         @default(0)
-  penalties          Float         @default(0)
-  absences           Float         @default(0)
-  otherDeductions    Float         @default(0)
-  grossSalary        Float
-  totalDeductions    Float
-  netSalary          Float
-  paymentStatus      PaymentStatus @default(PENDING)
-  paymentDate        DateTime?
-  paymentMethod      String?
-  notes              String?
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
-  employee           Employee      @relation("EmployeePayrolls", fields: [employeeId], references: [id], onDelete: Cascade)
+  id         Int @id @default(autoincrement())
+  employeeId Int
+
+  // الفترة
+  month      Int // 1-12
+  year       Int
+  periodDays Int // إجمالي أيام الشهر
+
+  // أيام العمل
+  actualWorkDays        Int // أيام العمل المدفوعة
+  workDaysForAllowances Int // أيام العمل لحساب البدلات (بدون خصم إجازات)
+  daysBeforeHire        Int @default(0)
+  daysAfterTermination  Int @default(0)
+  unpaidLeaveDays       Int @default(0)
+  paidLeaveDays         Int @default(0)
+  delayDays             Int @default(0)
+  actualPresenceDays    Int @default(0) // أيام التواجد الفعلي في الموقع
+
+  // الراتب الأساسي
+  basicSalary    Float @default(0) // الراتب الشهري المسجل
+  proratedSalary Float @default(0) // الراتب بالنسبة والتناسب
+
+  // البدلات (للتوافق مع الجدول القديم)
+  housingAllowance   Float @default(0)
+  transportAllowance Float @default(0)
+  foodAllowance      Float @default(0)
+  fieldAllowance     Float @default(0)
+  materialAllowance  Float @default(0)
+  totalAllowances    Float @default(0)
+
+  // المكافآت وبدل الإجازات
+  totalBonuses         Float @default(0)
+  totalLeaveAllowances Float @default(0)
+
+  // الخصومات
+  totalAdvances    Float @default(0)
+  totalWithdrawals Float @default(0)
+  totalDebts       Float @default(0)
+  totalDeductions  Float @default(0)
+
+  // العقوبات
+  totalDelayPenalties Float @default(0)
+
+  // الإجماليات
+  totalEarnings Float @default(0) // إجمالي المستحقات
+  netSalary     Float @default(0) // صافي الراتب
+
+  // تفاصيل إضافية (JSON)
+  allowancesDetails      Json? // {position: [], employee: [], material: []}
+  bonusesDetails         Json? // [{name, type, monthly, actual}]
+  leaveAllowancesDetails Json? // [{leaveNumber, days, amount, startDate, endDate}]
+  deductionsDetails      Json? // {cashAdvances: [], itemWithdrawals: [], debts: []}
+  penaltiesDetails       Json? // [{leaveNumber, delayDays, deductionDays, amount}]
+
+  // حالة الدفع
+  paymentStatus String    @default("PENDING") // PENDING, PAID, PARTIAL
+  amountPaid    Float     @default(0)
+  paymentDate   DateTime?
+  paymentNotes  String?
+
+  // حالة التسوية
+  settlementStatus String    @default("PENDING") // PENDING, SETTLED
+  settledAt        DateTime?
+  settledBy        BigInt?
+
+  // معلومات التسجيل
+  createdAt       DateTime @default(now())
+  createdByUserId BigInt?
+  updatedAt       DateTime @default(now()) @updatedAt
+
+  // العلاقات
+  employee Employee @relation("EmployeeMonthlyPayrolls", fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@unique([employeeId, month, year])
   @@index([employeeId])
   @@index([month, year])
+  @@index([createdAt])
   @@index([paymentStatus])
-}
-
-model HR_AttendanceException {
-  id            Int           @id @default(autoincrement())
-  employeeId    Int
-  date          DateTime
-  exceptionType String
-  hours         Float?
-  reason        String?
-  status        GeneralStatus @default(PENDING)
-  approvedBy    Int?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  employee      Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-
-  @@index([employeeId])
-  @@index([date])
-  @@index([status])
+  @@index([settlementStatus])
+  @@map("HR_MonthlyPayroll")
 }
 
 model EquipmentCategory {
@@ -1330,6 +1560,11 @@ enum TransferType {
   CASH
 }
 
+enum SalaryCalculationType {
+  MONTHLY // راتب شهري ثابت (افتراضي)
+  DAILY // حساب حسب أيام العمل
+}
+
 enum EducationLevel {
   HIGH_SCHOOL
   DIPLOMA
@@ -1459,31 +1694,52 @@ enum LeaveType {
   UNPAID
 }
 
+// نوع تسوية الإجازة (كيف حصل العامل على إجازته؟)
+enum LeaveSettlementType {
+  ACTUAL_LEAVE    // إجازة فعلية (العامل تغيب)
+  CASH_SETTLEMENT // تسوية نقدية (بدل نقدي - لم يتغيب)
+  POSTPONED       // مؤجلة
+}
+
+// أنواع عقوبات التأخير
+enum DelayPenaltyType {
+  DEDUCTION // خصم من الراتب
+  SUSPENSION // إيقاف عن العمل
+}
+
+// حالات العقوبة
+enum PenaltyStatus {
+  PENDING // قيد المراجعة
+  APPROVED // معتمدة
+  CANCELLED // ملغاة (مع عذر)
+  APPLIED // مطبقة على الراتب
+}
+
 enum MissionType {
   TASK_EXECUTION
   EXTERNAL_WORK
 }
 
 model HR_EmployeeMission {
-  id              Int           @id @default(autoincrement())
-  missionNumber   String        @unique
-  employeeId      Int
-  missionType     MissionType   @default(TASK_EXECUTION)
-  startDate       DateTime
-  endDate         DateTime
-  totalDays       Int
-  location        String
-  purpose         String
-  allowanceAmount Float?        @default(0)
-  status          GeneralStatus @default(PENDING)
-  isActive        Boolean       @default(true)
+  id               Int           @id @default(autoincrement())
+  missionNumber    String        @unique
+  employeeId       Int
+  missionType      MissionType   @default(TASK_EXECUTION)
+  startDate        DateTime
+  endDate          DateTime
+  totalDays        Int
+  location         String
+  purpose          String
+  allowanceAmount  Float?        @default(0)
+  status           GeneralStatus @default(PENDING)
+  isActive         Boolean       @default(true)
   actualReturnDate DateTime?
-  notes           String?
-  approvedBy      Int?
-  approvedAt      DateTime?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  employee        Employee      @relation("EmployeeMissions", fields: [employeeId], references: [id], onDelete: Cascade)
+  notes            String?
+  approvedBy       Int?
+  approvedAt       DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  employee         Employee      @relation("EmployeeMissions", fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@index([employeeId])
   @@index([missionNumber])
@@ -1507,4 +1763,383 @@ model HR_LeaveAllowance {
   @@index([employeeId])
   @@index([isSettled])
   @@index([createdAt])
+}
+
+// ============================================
+// نظام السلف والمسحوبات
+// ============================================
+
+model HR_AdvanceItem {
+  id           Int              @id @default(autoincrement())
+  nameAr       String
+  nameEn       String?
+  code         String           @unique
+  description  String?
+  price        Float
+  unit         String           @default("وحدة")
+  category     String?
+  orderIndex   Int              @default(0)
+  isActive     Boolean          @default(true)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  createdBy    BigInt?
+  updatedBy    BigInt?
+  transactions HR_Transaction[] @relation("ItemTransactions")
+
+  // نظام الرواتب الجديد
+  entitlements HR_MaterialEntitlement[] @relation("ItemEntitlements")
+
+  @@index([code])
+  @@index([isActive])
+  @@index([category])
+  @@index([orderIndex])
+  @@index([nameAr])
+  @@map("HR_AdvanceItem")
+}
+
+model HR_Transaction {
+  id                Int             @id @default(autoincrement())
+  transactionNumber String          @unique
+  employeeId        Int
+  transactionType   TransactionType @default(CASH_ADVANCE)
+  itemId            Int?
+  quantity          Float?
+  unitPrice         Float?
+  amount            Float
+  description       String?
+  notes             String?
+
+  // نظام التسوية المزدوج (تسوية الراتب + تسوية يدوية)
+  isSettled Boolean   @default(false) // تم الخصم من راتب؟
+  settledAt DateTime? // تاريخ الخصم من الراتب
+  settledBy BigInt? // من قام بالخصم من الراتب
+
+  isManuallySettled    Boolean   @default(false) // تم التعامل معها خارج النظام؟
+  manualSettlementType String? // نوع التسوية: EXTERNAL_PAYMENT, CANCELED, OTHER
+  manualSettlementNote String? // ملاحظة التسوية اليدوية
+  manuallySettledAt    DateTime? // تاريخ التسوية اليدوية
+  manuallySettledBy    BigInt? // من قام بالتسوية اليدوية
+
+  status          GeneralStatus              @default(PENDING)
+  approvedBy      BigInt?
+  approvedAt      DateTime?
+  rejectionReason String?
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
+  createdBy       BigInt?
+  updatedBy       BigInt?
+  employee        Employee                   @relation("EmployeeTransactions", fields: [employeeId], references: [id], onDelete: Cascade)
+  item            HR_AdvanceItem?            @relation("ItemTransactions", fields: [itemId], references: [id])
+  settlements     HR_TransactionSettlement[] @relation("TransactionSettlements")
+  changeLogs      HR_TransactionChangeLog[]  @relation("TransactionChangeLogs")
+
+  @@index([employeeId])
+  @@index([transactionNumber])
+  @@index([transactionType])
+  @@index([isSettled])
+  @@index([isManuallySettled])
+  @@index([status])
+  @@index([createdAt])
+  @@index([itemId])
+  @@index([employeeId, isSettled])
+  @@index([employeeId, isManuallySettled])
+  @@index([employeeId, createdAt])
+  @@map("HR_Transaction")
+}
+
+model HR_TransactionSettlement {
+  id             Int             @id @default(autoincrement())
+  transactionIds Json
+  settlementType SettlementType  @default(INDIVIDUAL)
+  totalAmount    Float
+  description    String?
+  settledBy      BigInt
+  settledAt      DateTime        @default(now())
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  transaction    HR_Transaction? @relation("TransactionSettlements", fields: [transactionId], references: [id])
+  transactionId  Int?
+
+  @@index([settledBy])
+  @@index([settlementType])
+  @@index([settledAt])
+  @@index([createdAt])
+  @@map("HR_TransactionSettlement")
+}
+
+model HR_TransactionChangeLog {
+  id            Int                   @id @default(autoincrement())
+  transactionId Int
+  changeType    TransactionChangeType @default(EDIT)
+  fieldName     String?
+  oldValue      String?
+  newValue      String?
+  reason        String
+  changedBy     BigInt
+  changedAt     DateTime              @default(now())
+  metadata      Json?
+  transaction   HR_Transaction        @relation("TransactionChangeLogs", fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@index([transactionId])
+  @@index([changeType])
+  @@index([changedBy])
+  @@index([changedAt])
+  @@index([transactionId, changedAt])
+  @@map("HR_TransactionChangeLog")
+}
+
+enum TransactionType {
+  CASH_ADVANCE
+  ITEM_WITHDRAWAL
+  EMPLOYEE_DEBT
+}
+
+enum SettlementType {
+  INDIVIDUAL
+  BULK
+  CUSTOM
+}
+
+enum TransactionChangeType {
+  EDIT
+  DELETE
+  RESTORE
+}
+
+// ═══════════════════════════════════════════════════════════
+// نظام إدارة الأقسام والصلاحيات
+// Department Management & Permissions System
+// ═══════════════════════════════════════════════════════════
+
+model DepartmentConfig {
+  id          Int                @id @default(autoincrement())
+  code        String             @unique // 'hr-management', 'notifications', etc.
+  name        String // اسم القسم
+  nameEn      String? // English name
+  description String? // وصف القسم
+  isEnabled   Boolean            @default(true) // تشغيل/إيقاف القسم
+  minRole     String             @default("ADMIN") // الحد الأدنى للوصول: SUPER_ADMIN, ADMIN, USER, GUEST
+  icon        String? // أيقونة القسم
+  order       Int                @default(0) // ترتيب العرض
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  createdBy   BigInt? // من أنشأ القسم
+  updatedBy   BigInt? // آخر من عدّل القسم
+  admins      DepartmentAdmin[]  @relation("DepartmentAdmins")
+  subFeatures SubFeatureConfig[] @relation("DepartmentSubFeatures")
+
+  @@index([code])
+  @@index([isEnabled])
+  @@index([minRole])
+  @@map("DepartmentConfig")
+}
+
+model DepartmentAdmin {
+  id           Int              @id @default(autoincrement())
+  departmentId Int // معرف القسم
+  userId       Int // معرف المستخدم
+  telegramId   BigInt // معرف تيليجرام للمستخدم
+  assignedAt   DateTime         @default(now())
+  assignedBy   BigInt // من قام بالتعيين
+  isActive     Boolean          @default(true)
+  notes        String? // ملاحظات
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  department   DepartmentConfig @relation("DepartmentAdmins", fields: [departmentId], references: [id], onDelete: Cascade)
+  user         User             @relation("UserDepartments", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([departmentId, userId])
+  @@index([departmentId])
+  @@index([userId])
+  @@index([telegramId])
+  @@index([isActive])
+  @@map("DepartmentAdmin")
+}
+
+// تعريف الوظائف الفرعية داخل كل قسم
+model SubFeatureConfig {
+  id             Int               @id @default(autoincrement())
+  code           String            @unique // 'hr:advances', 'hr:employees', etc.
+  departmentCode String // 'hr-management'
+  name           String // اسم الوظيفة
+  nameEn         String? // English name
+  description    String? // وصف الوظيفة
+  isEnabled      Boolean           @default(true) // تشغيل/إيقاف الوظيفة
+  minRole        String? // الحد الأدنى للوصول (NULL = يرث من القسم)
+  icon           String? // أيقونة الوظيفة
+  order          Int               @default(0) // ترتيب العرض
+  superAdminOnly Boolean           @default(false) // (مهمل) استخدم minRole بدلاً منه
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  createdBy      BigInt? // من أنشأ الوظيفة
+  updatedBy      BigInt? // آخر من عدّل الوظيفة
+  admins         SubFeatureAdmin[] @relation("SubFeatureAdmins")
+  department     DepartmentConfig? @relation("DepartmentSubFeatures", fields: [departmentCode], references: [code])
+
+  @@index([code])
+  @@index([departmentCode])
+  @@index([isEnabled])
+  @@index([minRole])
+  @@index([superAdminOnly])
+  @@map("SubFeatureConfig")
+}
+
+// الأدمن المعينين على وظيفة فرعية محددة
+model SubFeatureAdmin {
+  id           Int              @id @default(autoincrement())
+  subFeatureId Int // معرف الوظيفة الفرعية
+  userId       Int // معرف المستخدم
+  telegramId   BigInt // معرف تيليجرام للمستخدم
+  assignedAt   DateTime         @default(now())
+  assignedBy   BigInt // من قام بالتعيين
+  isActive     Boolean          @default(true)
+  notes        String? // ملاحظات
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  subFeature   SubFeatureConfig @relation("SubFeatureAdmins", fields: [subFeatureId], references: [id], onDelete: Cascade)
+  user         User             @relation("UserSubFeatures", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([subFeatureId, userId])
+  @@index([subFeatureId])
+  @@index([userId])
+  @@index([telegramId])
+  @@index([isActive])
+  @@map("SubFeatureAdmin")
+}
+
+// ========================================
+// نظام عقوبات التأخير في الإجازات
+// ========================================
+
+// سياسات عقوبات التأخير
+model HR_DelayPenaltyPolicy {
+  id          Int     @id @default(autoincrement())
+  name        String // اسم السياسة
+  description String? // وصف السياسة
+
+  // نطاق أيام التأخير
+  delayDays Int @unique // عدد أيام التأخير (1, 2, 3, 4, 5+)
+
+  // نوع العقوبة
+  penaltyType DelayPenaltyType // DEDUCTION أو SUSPENSION
+
+  // قيمة العقوبة
+  deductionDays  Float? // عدد أيام الخصم من الراتب
+  suspensionDays Int? // عدد أيام الإيقاف (null = غير محدد)
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy BigInt? // من أنشأ السياسة
+  updatedBy BigInt? // آخر من عدّلها
+
+  // العقوبات المطبقة بهذه السياسة
+  appliedPenalties HR_AppliedPenalty[]
+
+  @@index([delayDays])
+  @@index([isActive])
+  @@map("HR_DelayPenaltyPolicy")
+}
+
+// العقوبات المطبقة على العاملين
+model HR_AppliedPenalty {
+  id Int @id @default(autoincrement())
+
+  // ربط بالإجازة والعامل
+  leaveId    Int
+  leave      HR_EmployeeLeave @relation("LeaveAppliedPenalties", fields: [leaveId], references: [id])
+  employeeId Int
+  employee   Employee         @relation("EmployeeAppliedPenalties", fields: [employeeId], references: [id])
+
+  // تفاصيل التأخير
+  delayDays Int // عدد أيام التأخير الفعلي
+
+  // السياسة المطبقة
+  policyId Int?
+  policy   HR_DelayPenaltyPolicy? @relation(fields: [policyId], references: [id])
+
+  // نوع وقيمة العقوبة المطبقة
+  penaltyType    DelayPenaltyType
+  deductionDays  Float? // أيام الخصم الفعلية
+  suspensionDays Int? // أيام الإيقاف الفعلية
+
+  // حالة العقوبة
+  status PenaltyStatus @default(PENDING)
+
+  // الإلغاء والعذر
+  isCancelled  Boolean   @default(false)
+  cancelReason String? // سبب الإلغاء/العذر
+  cancelledBy  BigInt? // من ألغى العقوبة
+  cancelledAt  DateTime?
+
+  // التطبيق على الراتب
+  isAppliedToPayroll Boolean           @default(false)
+  payrollRecordId    Int?
+  payrollRecord      HR_PayrollRecord? @relation("PayrollAppliedPenalties", fields: [payrollRecordId], references: [id])
+  appliedToPayrollAt DateTime?
+
+  // التسجيل
+  createdBy BigInt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  notes String? // ملاحظات إضافية
+
+  @@index([leaveId])
+  @@index([employeeId])
+  @@index([status])
+  @@index([isCancelled])
+  @@index([isAppliedToPayroll])
+  @@map("HR_AppliedPenalty")
+}
+
+// سجل تعديلات دورات العمل والإجازات
+model HR_CycleChangeLog {
+  id Int @id @default(autoincrement())
+
+  // نوع التعديل
+  entityType String // "Position" أو "Employee"
+  entityId   Int // ID الوظيفة أو الموظف
+
+  // القيم القديمة
+  oldWorkDays  Int?
+  oldLeaveDays Int?
+
+  // القيم الجديدة
+  newWorkDays  Int?
+  newLeaveDays Int?
+
+  // معلومات التعديل
+  changedBy BigInt
+  changedAt DateTime @default(now())
+  reason    String? // سبب التعديل (اختياري)
+
+  @@index([entityType, entityId])
+  @@index([changedBy])
+  @@index([changedAt])
+  @@map("HR_CycleChangeLog")
+}
+
+// ============================================
+// نظام إعدادات قسم شئون العاملين
+// ============================================
+
+model HR_Settings {
+  id        Int      @id @default(autoincrement())
+  
+  // إعدادات الإشعارات
+  notificationsEnabled       Boolean  @default(true)   // تفعيل/تعطيل الإشعارات
+  notificationTime           String   @default("09:00") // وقت إرسال الإشعارات اليومية (HH:MM)
+  leaveStartReminderDays     Int      @default(1)      // إشعار قبل بداية الإجازة بكم يوم
+  leaveEndReminderDays       Int      @default(1)      // إشعار قبل نهاية الإجازة بكم يوم
+  
+  // إعدادات القسم العامة
+  sectionEnabled             Boolean  @default(true)   // تفعيل/تعطيل القسم
+  
+  // معلومات التعديل
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  updatedBy BigInt?
+  
+  @@map("HR_Settings")
 }

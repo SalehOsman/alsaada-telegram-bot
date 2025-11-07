@@ -5,6 +5,7 @@
 
 import type { Context } from '#root/bot/context.js'
 import { featureRegistry } from '#root/bot/features/registry/index.js'
+import { settingsManager } from '#root/modules/settings/index.js'
 import { Composer, InlineKeyboard } from 'grammy'
 
 export const featuresToggleHandler = new Composer<Context>()
@@ -70,6 +71,35 @@ featuresToggleHandler.callbackQuery(/^settings:feature:toggle:(.+)$/, async (ctx
   // Toggle status
   feature.config.enabled = !feature.config.enabled
   const newStatus = feature.config.enabled ? 'مفعّل' : 'معطّل'
+
+  // Save to both settings and database
+  const settingKey = `features.${featureId}.enabled`
+  try {
+    // Save to settings manager
+    await settingsManager.set(settingKey, feature.config.enabled, {
+      updatedBy: ctx.dbUser.userId,
+      reason: `تبديل حالة القسم: ${feature.config.name}`,
+    })
+
+    // Also update DepartmentConfig in database if exists
+    const { Database } = await import('#root/modules/database/index.js')
+    const departmentConfig = await Database.prisma.departmentConfig.findUnique({
+      where: { code: featureId },
+    })
+
+    if (departmentConfig) {
+      await Database.prisma.departmentConfig.update({
+        where: { code: featureId },
+        data: {
+          isEnabled: feature.config.enabled,
+          updatedBy: ctx.dbUser.telegramId,
+        },
+      })
+    }
+  }
+  catch (error) {
+    console.error(`Failed to save feature state for ${featureId}:`, error)
+  }
 
   await ctx.answerCallbackQuery(`✅ تم ${newStatus === 'مفعّل' ? 'تفعيل' : 'إيقاف'} القسم`)
 

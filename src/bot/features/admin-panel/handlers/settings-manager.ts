@@ -58,6 +58,42 @@ settingsManagerHandler.callbackQuery('admin:settings', async (ctx) => {
   }
 })
 
+// دعم نمط MenuBuilder المباشر بالاسم
+settingsManagerHandler.callbackQuery('settingsManagerHandler', async (ctx) => {
+  await ctx.answerCallbackQuery()
+
+  try {
+    const categories: SettingCategory[] = [
+      'bot',
+      'security',
+      'notifications',
+      'features',
+      'database',
+      'performance',
+      'logging',
+    ]
+
+    const keyboard = new InlineKeyboard()
+    categories.forEach((category, index) => {
+      const icon = getCategoryIcon(category)
+      const label = getCategoryLabel(category)
+      keyboard.text(`${icon} ${label}`, `admin:settings:category:${category}`)
+      if ((index + 1) % 2 === 0)
+        keyboard.row()
+    })
+    keyboard.row().text('⬅️ رجوع', 'menu:feature:admin-panel')
+
+    await ctx.editMessageText(
+      '⚙️ **إدارة الإعدادات**\n\n' + 'اختر الفئة التي تريد تعديل إعداداتها:',
+      { parse_mode: 'Markdown', reply_markup: keyboard },
+    )
+  }
+  catch (error) {
+    logger.error({ error }, 'Error showing settings menu (direct)')
+    await ctx.answerCallbackQuery('حدث خطأ')
+  }
+})
+
 /**
  * Settings category view
  */
