@@ -991,17 +991,23 @@ model HR_AdvanceItem {
 
 ```prisma
 model HR_TransactionSettlement {
-  id                  Int              @id @default(autoincrement())
-  settlementNumber    String           @unique // رقم التسوية
-  employeeId          Int              // الموظف
-  totalAmount         Float            // المبلغ الإجمالي المسوّى
-  settlementDate      DateTime         // تاريخ التسوية
-  notes               String?
-  createdBy           BigInt
-  createdAt           DateTime         @default(now())
-  updatedAt           DateTime         @updatedAt
-  
-  transactions        HR_Transaction[]
+  id             Int             @id @default(autoincrement())
+  transactionIds Json
+  settlementType SettlementType  @default(INDIVIDUAL)
+  totalAmount    Float
+  description    String?
+  settledBy      BigInt
+  settledAt      DateTime        @default(now())
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  transaction    HR_Transaction? @relation("TransactionSettlements", fields: [transactionId], references: [id])
+  transactionId  Int?
+
+  @@index([settledBy])
+  @@index([settlementType])
+  @@index([settledAt])
+  @@index([createdAt])
+  @@map("HR_TransactionSettlement")
 }
 ```
 
@@ -1012,15 +1018,24 @@ model HR_TransactionSettlement {
 
 ```prisma
 model HR_TransactionChangeLog {
-  id              Int            @id @default(autoincrement())
-  transactionId   Int            // المعاملة
-  action          String         // الإجراء (CREATE, UPDATE, APPROVE, REJECT, etc.)
-  oldData         String?        // البيانات القديمة (JSON)
-  newData         String?        // البيانات الجديدة (JSON)
-  changedBy       BigInt         // من قام بالتغيير
-  createdAt       DateTime       @default(now())
-  
-  transaction     HR_Transaction @relation(fields: [transactionId], references: [id])
+  id            Int                   @id @default(autoincrement())
+  transactionId Int
+  changeType    TransactionChangeType @default(EDIT)
+  fieldName     String?
+  oldValue      String?
+  newValue      String?
+  reason        String
+  changedBy     BigInt
+  changedAt     DateTime              @default(now())
+  metadata      Json?
+  transaction   HR_Transaction        @relation("TransactionChangeLogs", fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@index([transactionId])
+  @@index([changeType])
+  @@index([changedBy])
+  @@index([changedAt])
+  @@index([transactionId, changedAt])
+  @@map("HR_TransactionChangeLog")
 }
 ```
 
@@ -1031,16 +1046,148 @@ model HR_TransactionChangeLog {
 
 ```prisma
 model HR_Settings {
-  id          Int      @id @default(autoincrement())
-  key         String   @unique // مفتاح الإعداد
-  value       String   // القيمة (JSON أو نص)
-  description String?  // الوصف
-  category    String?  // الفئة (PAYROLL, LEAVE, PENALTY, etc.)
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        Int      @id @default(autoincrement())
+  
+  // إعدادات الإشعارات
+  notificationsEnabled       Boolean  @default(true)   // تفعيل/تعطيل الإشعارات
+  notificationTime           String   @default("09:00") // وقت إرسال الإشعارات اليومية (HH:MM)
+  leaveStartReminderDays     Int      @default(1)      // إشعار قبل بداية الإجازة بكم يوم
+  leaveEndReminderDays       Int      @default(1)      // إشعار قبل نهاية الإجازة بكم يوم
+  
+  // إعدادات القسم العامة
+  sectionEnabled             Boolean  @default(true)   // تفعيل/تعطيل القسم
+  
+  // معلومات التعديل
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  updatedBy BigInt?
+  
+  @@map("HR_Settings")
 }
 ```
+
+---
+
+### 24. DepartmentConfig
+**إعدادات الأقسام**
+
+```prisma
+model DepartmentConfig {
+  id          Int                @id @default(autoincrement())
+  code        String             @unique // 'hr-management', 'notifications', etc.
+  name        String // اسم القسم
+  nameEn      String? // English name
+  description String? // وصف القسم
+  isEnabled   Boolean            @default(true) // تشغيل/إيقاف القسم
+  minRole     String             @default("ADMIN") // الحد الأدنى للوصول: SUPER_ADMIN, ADMIN, USER, GUEST
+  icon        String? // أيقونة القسم
+  order       Int                @default(0) // ترتيب العرض
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  createdBy   BigInt? // من أنشأ القسم
+  updatedBy   BigInt? // آخر من عدّل القسم
+  admins      DepartmentAdmin[]  @relation("DepartmentAdmins")
+  subFeatures SubFeatureConfig[] @relation("DepartmentSubFeatures")
+
+  @@index([code])
+  @@index([isEnabled])
+  @@index([minRole])
+  @@map("DepartmentConfig")
+}
+```
+
+---
+
+### 25. DepartmentAdmin
+**مدراء الأقسام**
+
+```prisma
+model DepartmentAdmin {
+  id           Int              @id @default(autoincrement())
+  departmentId Int // معرف القسم
+  userId       Int // معرف المستخدم
+  telegramId   BigInt // معرف تيليجرام للمستخدم
+  assignedAt   DateTime         @default(now())
+  assignedBy   BigInt // من قام بالتعيين
+  isActive     Boolean          @default(true)
+  notes        String? // ملاحظات
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  department   DepartmentConfig @relation("DepartmentAdmins", fields: [departmentId], references: [id], onDelete: Cascade)
+  user         User             @relation("UserDepartments", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([departmentId, userId])
+  @@index([departmentId])
+  @@index([userId])
+  @@index([telegramId])
+  @@index([isActive])
+  @@map("DepartmentAdmin")
+}
+```
+
+---
+
+### 26. SubFeatureConfig
+**الميزات الفرعية**
+
+```prisma
+model SubFeatureConfig {
+  id             Int               @id @default(autoincrement())
+  code           String            @unique // 'hr:advances', 'hr:employees', etc.
+  departmentCode String // 'hr-management'
+  name           String // اسم الوظيفة
+  nameEn         String? // English name
+  description    String? // وصف الوظيفة
+  isEnabled      Boolean           @default(true) // تشغيل/إيقاف الوظيفة
+  minRole        String? // الحد الأدنى للوصول (NULL = يرث من القسم)
+  icon           String? // أيقونة الوظيفة
+  order          Int               @default(0) // ترتيب العرض
+  superAdminOnly Boolean           @default(false) // (مهمل) استخدم minRole بدلاً منه
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  createdBy      BigInt? // من أنشأ الوظيفة
+  updatedBy      BigInt? // آخر من عدّل الوظيفة
+  admins         SubFeatureAdmin[] @relation("SubFeatureAdmins")
+  department     DepartmentConfig? @relation("DepartmentSubFeatures", fields: [departmentCode], references: [code])
+
+  @@index([code])
+  @@index([departmentCode])
+  @@index([isEnabled])
+  @@index([minRole])
+  @@index([superAdminOnly])
+  @@map("SubFeatureConfig")
+}
+```
+
+---
+
+### 27. SubFeatureAdmin
+**مدراء الميزات الفرعية**
+
+```prisma
+model SubFeatureAdmin {
+  id           Int              @id @default(autoincrement())
+  subFeatureId Int // معرف الوظيفة الفرعية
+  userId       Int // معرف المستخدم
+  telegramId   BigInt // معرف تيليجرام للمستخدم
+  assignedAt   DateTime         @default(now())
+  assignedBy   BigInt // من قام بالتعيين
+  isActive     Boolean          @default(true)
+  notes        String? // ملاحظات
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  subFeature   SubFeatureConfig @relation("SubFeatureAdmins", fields: [subFeatureId], references: [id], onDelete: Cascade)
+  user         User             @relation("UserSubFeatures", fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([subFeatureId, userId])
+  @@index([subFeatureId])
+  @@index([userId])
+  @@index([telegramId])
+  @@index([isActive])
+  @@map("SubFeatureAdmin")
+}
+```
+
 
 **أمثلة:**
 ```json
