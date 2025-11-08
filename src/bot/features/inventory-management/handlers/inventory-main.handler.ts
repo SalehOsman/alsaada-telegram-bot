@@ -1,7 +1,6 @@
 import type { Context } from '../../../context.js'
 import { Composer, InlineKeyboard } from 'grammy'
 import { Database } from '../../../../modules/database/index.js'
-import { MenuBuilder } from '../../registry/menu-builder.js'
 
 export const inventoryMainHandler = new Composer<Context>()
 
@@ -26,7 +25,7 @@ inventoryMainHandler.callbackQuery(/^menu:feature:inventory-management$/, async 
   const keyboard = new InlineKeyboard()
 
   // عرض المخازن
-  warehouses.forEach(warehouse => {
+  warehouses.forEach((warehouse) => {
     const icon = getWarehouseIcon(warehouse.type)
     keyboard.text(`${icon} ${warehouse.name}`, `inv:warehouse:${warehouse.id}`)
     keyboard.row()
