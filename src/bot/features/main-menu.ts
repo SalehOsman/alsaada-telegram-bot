@@ -168,8 +168,8 @@ mainMenuComposer.callbackQuery(/^menu:feature:(.+)$/, async (ctx) => {
       return
     }
 
-    // Build sub-menu (عرض قسم شئون العاملين بعمود واحد)
-    const keyboard = featureId === 'hr-management'
+    // Build sub-menu (عرض قسم شئون العاملين والمخازن بعمود واحد)
+    const keyboard = featureId === 'hr-management' || featureId === 'inventory-management'
       ? await MenuBuilder.buildSubMenu(featureId, ctx.dbUser, {
         maxButtonsPerRow: 1,
         showBackButton: true,

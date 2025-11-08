@@ -138,6 +138,33 @@ export interface SessionData {
     penaltyId: number
     step: 'waiting_reason'
   }
+  // Inventory management
+  barcodeScan?: {
+    action: 'search' | 'receiving' | 'dispensing' | 'return'
+    warehouseId?: number
+    purchaseOrderId?: number
+  }
+  waitingForSearch?: {
+    warehouseId: number
+    action: 'search' | 'dispensing' | 'receiving'
+  }
+  waitingForSku?: {
+    warehouseId: number
+    action: 'dispensing' | 'receiving'
+  }
+  dispensing?: {
+    warehouseId: number
+    itemId?: number
+    stockId?: number
+    equipmentId?: number
+    equipmentName?: string
+    projectId?: number
+    projectName?: string
+    quantity?: number
+    availableQuantity?: number
+    unit?: string
+    step: 'select_method' | 'select_equipment' | 'enter_quantity' | 'select_project'
+  }
 }
 
 interface ExtendedContextFlavor {

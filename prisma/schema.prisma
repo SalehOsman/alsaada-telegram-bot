@@ -157,6 +157,9 @@ model Project {
   equipmentUsageRecords EquipmentUsage[]
   Company               Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
+  // نظام المخازن
+  transactionLinks TransactionLink[]
+
   @@index([endDate])
   @@index([startDate])
   @@index([isActive])
@@ -603,22 +606,22 @@ model Employee {
   createdBy                Int?
   updatedBy                Int?
 
-  operatedEquipment    Equipment[]              @relation("EquipmentOperator")
-  fuelLogs             FuelLog[]                @relation("FuelOperator")
-  performedMaintenance MaintenanceRecord[]      @relation("MaintenancePerformer")
-  shiftAssignments     ShiftAssignment[]        @relation("ShiftOperator")
-  equipmentUsages      EquipmentUsage[]         @relation("UsageOperator")
-  directManager        Employee?                @relation("ManagerSubordinates", fields: [directManagerId], references: [id])
-  subordinates         Employee[]               @relation("ManagerSubordinates")
-  position             Position                 @relation(fields: [positionId], references: [id])
-  department           Department               @relation(fields: [departmentId], references: [id])
-  company              Company                  @relation(fields: [companyId], references: [id])
-  governorate          Governorate?             @relation("EmployeeGovernorate", fields: [governorateId], references: [id])
-  leaveReplacements    HR_EmployeeLeave[]       @relation("LeaveReplacements")
-  leaves               HR_EmployeeLeave[]       @relation("EmployeeLeaves")
-  missions             HR_EmployeeMission[]     @relation("EmployeeMissions")
-  leaveAllowances      HR_LeaveAllowance[]      @relation("EmployeeAllowances")
-  transactions         HR_Transaction[]         @relation("EmployeeTransactions")
+  operatedEquipment    Equipment[]          @relation("EquipmentOperator")
+  fuelLogs             FuelLog[]            @relation("FuelOperator")
+  performedMaintenance MaintenanceRecord[]  @relation("MaintenancePerformer")
+  shiftAssignments     ShiftAssignment[]    @relation("ShiftOperator")
+  equipmentUsages      EquipmentUsage[]     @relation("UsageOperator")
+  directManager        Employee?            @relation("ManagerSubordinates", fields: [directManagerId], references: [id])
+  subordinates         Employee[]           @relation("ManagerSubordinates")
+  position             Position             @relation(fields: [positionId], references: [id])
+  department           Department           @relation(fields: [departmentId], references: [id])
+  company              Company              @relation(fields: [companyId], references: [id])
+  governorate          Governorate?         @relation("EmployeeGovernorate", fields: [governorateId], references: [id])
+  leaveReplacements    HR_EmployeeLeave[]   @relation("LeaveReplacements")
+  leaves               HR_EmployeeLeave[]   @relation("EmployeeLeaves")
+  missions             HR_EmployeeMission[] @relation("EmployeeMissions")
+  leaveAllowances      HR_LeaveAllowance[]  @relation("EmployeeAllowances")
+  transactions         HR_Transaction[]     @relation("EmployeeTransactions")
 
   // نظام الرواتب الجديد
   employeeAllowances HR_EmployeeAllowance[] @relation("EmployeeAllowances")
@@ -627,6 +630,10 @@ model Employee {
 
   // نظام عقوبات التأخير
   appliedPenalties HR_AppliedPenalty[] @relation("EmployeeAppliedPenalties")
+
+  // نظام المخازن
+  transactionLinks  TransactionLink[]
+  employeeCustodies EmployeeCustody[]
 
   skills         Skill[]
   certifications Certification[]
@@ -723,9 +730,9 @@ model HR_EmployeeLeave {
   delayDays         Int                 @default(0)
   isPostponed       Boolean             @default(false)
   postponedTimes    Int                 @default(0)
-  allowanceAmount   Float?              // مبلغ البدل النقدي (للتسوية النقدية)
+  allowanceAmount   Float? // مبلغ البدل النقدي (للتسوية النقدية)
   allowanceSettled  Boolean             @default(false)
-  allowancePaidDate DateTime?           // تاريخ صرف البدل
+  allowancePaidDate DateTime? // تاريخ صرف البدل
   medicalReportPath String?
   affectsNextLeave  Boolean             @default(true)
   replacementId     Int?
@@ -734,8 +741,8 @@ model HR_EmployeeLeave {
   rejectionReason   String?
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
-  replacement       Employee?     @relation("LeaveReplacements", fields: [replacementId], references: [id])
-  employee          Employee      @relation("EmployeeLeaves", fields: [employeeId], references: [id], onDelete: Cascade)
+  replacement       Employee?           @relation("LeaveReplacements", fields: [replacementId], references: [id])
+  employee          Employee            @relation("EmployeeLeaves", fields: [employeeId], references: [id], onDelete: Cascade)
 
   // العقوبات المطبقة على هذه الإجازة
   appliedPenalties HR_AppliedPenalty[] @relation("LeaveAppliedPenalties")
@@ -1176,6 +1183,9 @@ model Equipment {
   maintenanceSchedules MaintenanceSchedule[]
   shiftAssignments     ShiftAssignment[]
   usageRecords         EquipmentUsage[]
+
+  // نظام المخازن
+  transactionLinks TransactionLink[]
 
   @@index([code])
   @@index([plateNumber])
@@ -1696,9 +1706,9 @@ enum LeaveType {
 
 // نوع تسوية الإجازة (كيف حصل العامل على إجازته؟)
 enum LeaveSettlementType {
-  ACTUAL_LEAVE    // إجازة فعلية (العامل تغيب)
+  ACTUAL_LEAVE // إجازة فعلية (العامل تغيب)
   CASH_SETTLEMENT // تسوية نقدية (بدل نقدي - لم يتغيب)
-  POSTPONED       // مؤجلة
+  POSTPONED // مؤجلة
 }
 
 // أنواع عقوبات التأخير
@@ -2125,21 +2135,243 @@ model HR_CycleChangeLog {
 // ============================================
 
 model HR_Settings {
-  id        Int      @id @default(autoincrement())
-  
+  id Int @id @default(autoincrement())
+
   // إعدادات الإشعارات
-  notificationsEnabled       Boolean  @default(true)   // تفعيل/تعطيل الإشعارات
-  notificationTime           String   @default("09:00") // وقت إرسال الإشعارات اليومية (HH:MM)
-  leaveStartReminderDays     Int      @default(1)      // إشعار قبل بداية الإجازة بكم يوم
-  leaveEndReminderDays       Int      @default(1)      // إشعار قبل نهاية الإجازة بكم يوم
-  
+  notificationsEnabled   Boolean @default(true) // تفعيل/تعطيل الإشعارات
+  notificationTime       String  @default("09:00") // وقت إرسال الإشعارات اليومية (HH:MM)
+  leaveStartReminderDays Int     @default(1) // إشعار قبل بداية الإجازة بكم يوم
+  leaveEndReminderDays   Int     @default(1) // إشعار قبل نهاية الإجازة بكم يوم
+
   // إعدادات القسم العامة
-  sectionEnabled             Boolean  @default(true)   // تفعيل/تعطيل القسم
-  
+  sectionEnabled Boolean @default(true) // تفعيل/تعطيل القسم
+
   // معلومات التعديل
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   updatedBy BigInt?
-  
+
   @@map("HR_Settings")
+}
+
+// ============================================
+// نظام إدارة المخازن (Inventory Management)
+// ============================================
+
+// Enums
+enum WarehouseType {
+  SPARE_PARTS // قطع الغيار
+  DIESEL // السولار
+  OILS_GREASES // الزيوت والشحوم
+  TOOLS // العدد والأدوات
+}
+
+enum StockTransactionType {
+  PURCHASE_IN // إضافة مشتريات
+  CONSUMPTION_OUT // صرف للاستهلاك
+  CUSTODY_OUT // صرف كعهدة
+  RETURN_IN // إرجاع للمخزن
+}
+
+// ============================================
+// المجموعة 1: كيانات المخزن (The Setup)
+// ============================================
+
+// 1. Warehouse (المخزن)
+model Warehouse {
+  id          Int           @id @default(autoincrement())
+  name        String
+  type        WarehouseType
+  location    String?
+  description String?
+  isActive    Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  stocks Stock[]
+
+  @@index([type])
+  @@index([isActive])
+  @@map("Warehouse")
+}
+
+// 2. ItemCategory (فئة الصنف)
+model ItemCategory {
+  id            Int           @id @default(autoincrement())
+  name          String
+  warehouseType WarehouseType
+  description   String?
+  isActive      Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  items Item[]
+
+  @@index([warehouseType])
+  @@index([isActive])
+  @@map("ItemCategory")
+}
+
+// 3. Item (الصنف - الكتالوج الرئيسي)
+model Item {
+  id                Int       @id @default(autoincrement())
+  name              String
+  sku               String    @unique // الباركود
+  unit              String // "قطعة"، "لتر"، "جالون"، "متر"
+  categoryId        Int
+  lowStockThreshold Int? // حد إعادة الطلب
+  description       String?
+  expiryDate        DateTime? // تاريخ انتهاء الصلاحية (للزيوت)
+  imageUrl          String?   // رابط صورة المنتج
+  imagePath         String?   // مسار الملف المحلي
+  isActive          Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  category          ItemCategory      @relation(fields: [categoryId], references: [id])
+  stocks            Stock[]
+  employeeCustodies EmployeeCustody[]
+
+  @@index([sku])
+  @@index([categoryId])
+  @@index([isActive])
+  @@map("Item")
+}
+
+// 4. Supplier (المورد)
+model Supplier {
+  id            Int      @id @default(autoincrement())
+  name          String
+  contactPerson String?
+  phone         String?
+  taxNumber     String? // الرقم الضريبي
+  address       String?
+  email         String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  purchaseOrders PurchaseOrder[]
+
+  @@index([isActive])
+  @@map("Supplier")
+}
+
+// ============================================
+// المجموعة 2: الرصيد والتكلفة (The Balance & Costing)
+// ============================================
+
+// 5. Stock (الرصيد)
+model Stock {
+  id          Int      @id @default(autoincrement())
+  warehouseId Int
+  itemId      Int
+  quantity    Float    @default(0) // الكمية المتاحة حالياً
+  averageCost Float    @default(0) // متوسط التكلفة المرجح (WAC)
+  updatedAt   DateTime @updatedAt
+
+  warehouse    Warehouse          @relation(fields: [warehouseId], references: [id])
+  item         Item               @relation(fields: [itemId], references: [id])
+  transactions StockTransaction[]
+
+  @@unique([warehouseId, itemId])
+  @@index([warehouseId])
+  @@index([itemId])
+  @@map("Stock")
+}
+
+// ============================================
+// المجموعة 3: الحركات (The Movements)
+// ============================================
+
+// 6. PurchaseOrder (أمر الشراء)
+model PurchaseOrder {
+  id            Int      @id @default(autoincrement())
+  supplierId    Int
+  orderDate     DateTime @default(now())
+  invoiceNumber String?
+  totalAmount   Float?
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  supplier     Supplier           @relation(fields: [supplierId], references: [id])
+  transactions StockTransaction[]
+
+  @@index([supplierId])
+  @@index([orderDate])
+  @@map("PurchaseOrder")
+}
+
+// 7. StockTransaction (حركة المخزون)
+model StockTransaction {
+  id              Int                  @id @default(autoincrement())
+  stockId         Int
+  type            StockTransactionType
+  quantity        Float // الكمية (موجبة للإضافة، سالبة للصرف)
+  date            DateTime             @default(now())
+  unitPrice       Float? // سعر الوحدة (تكلفة في وقت الحركة)
+  purchaseOrderId Int?
+  notes           String?
+  createdAt       DateTime             @default(now())
+
+  stock           Stock            @relation(fields: [stockId], references: [id])
+  purchaseOrder   PurchaseOrder?   @relation(fields: [purchaseOrderId], references: [id])
+  transactionLink TransactionLink?
+  employeeCustody EmployeeCustody?
+
+  @@index([stockId])
+  @@index([type])
+  @@index([date])
+  @@index([purchaseOrderId])
+  @@map("StockTransaction")
+}
+
+// 8. TransactionLink (بيان ربط الحركة)
+model TransactionLink {
+  id                 Int      @id @default(autoincrement())
+  stockTransactionId Int      @unique
+  employeeId         Int? // الموظف المستلم (الربط مع HR)
+  equipmentId        Int? // المعدة المستهلكة (الربط مع Equipment)
+  projectId          Int? // المشروع الموجه له التكلفة (الربط مع Project)
+  notes              String?
+  createdAt          DateTime @default(now())
+
+  stockTransaction StockTransaction @relation(fields: [stockTransactionId], references: [id])
+  employee         Employee?        @relation(fields: [employeeId], references: [id])
+  equipment        Equipment?       @relation(fields: [equipmentId], references: [id])
+  project          Project?         @relation(fields: [projectId], references: [id])
+
+  @@index([employeeId])
+  @@index([equipmentId])
+  @@index([projectId])
+  @@map("TransactionLink")
+}
+
+// ============================================
+// المجموعة 4: العهدة (The Custody)
+// ============================================
+
+// 9. EmployeeCustody (عهدة الموظف)
+model EmployeeCustody {
+  id                 Int       @id @default(autoincrement())
+  employeeId         Int // الموظف (الربط مع HR)
+  itemId             Int
+  quantity           Float
+  dateIssued         DateTime  @default(now())
+  dateReturned       DateTime? // تاريخ الإرجاع (null = لا يزال في العهدة)
+  stockTransactionId Int       @unique
+  notes              String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  employee         Employee         @relation(fields: [employeeId], references: [id])
+  item             Item             @relation(fields: [itemId], references: [id])
+  stockTransaction StockTransaction @relation(fields: [stockTransactionId], references: [id])
+
+  @@index([employeeId])
+  @@index([itemId])
+  @@index([dateIssued])
+  @@index([dateReturned])
+  @@map("EmployeeCustody")
 }
