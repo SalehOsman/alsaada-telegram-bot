@@ -37,6 +37,11 @@ async function startPolling(config: PollingConfig) {
   await CompanyService.getOrCreate()
   logger.info('Company initialized')
 
+  // Seed inventory defaults (categories and locations)
+  const { seedInventoryDefaults, seedOilsGreasesCategories } = await import('#root/scripts/seed-inventory-defaults.js')
+  await seedInventoryDefaults()
+  await seedOilsGreasesCategories()
+
   // Restore feature states from database (MUST be after Database.connect())
   const { featureLoader } = await import('#root/bot/features/registry/index.js')
   await featureLoader.restoreFeatureStates()

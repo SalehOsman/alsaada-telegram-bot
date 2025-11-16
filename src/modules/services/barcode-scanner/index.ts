@@ -4,9 +4,9 @@
  */
 
 import { Buffer } from 'node:buffer'
+
 import { logger } from '#root/modules/services/logger/index.js'
-// @ts-expect-error - No types available for qrcode-reader
-import QrCodeReader from 'qrcode-reader'
+import { BinaryBitmap, DecodeHintType, HybridBinarizer, MultiFormatReader, NotFoundException, RGBLuminanceSource } from '@zxing/library'
 import sharp from 'sharp'
 
 export interface BarcodeResult {
@@ -26,7 +26,7 @@ export interface QRGenerationOptions {
 
 export class BarcodeScannerService {
   /**
-   * Scan QR Code from image buffer
+   * Scan QR Code from image buffer using ZXing
    */
   static async scanQRCode(imageBuffer: Buffer): Promise<BarcodeResult | null> {
     try {
@@ -45,49 +45,49 @@ export class BarcodeScannerService {
           .toBuffer()
       }
 
-      // Convert image to optimal format for QR scanning
-      const processedImage = await sharp(imageBuffer)
-        .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
-        .grayscale()
-        .normalize()
-        .png({ quality: 100 })
-        .toBuffer()
+      // Convert image to raw pixel data
+      const { data, info } = await sharp(imageBuffer)
+        .resize(1200, 1200, { fit: 'inside', withoutEnlargement: true })
+        .raw()
+        .toBuffer({ resolveWithObject: true })
 
-      return new Promise((resolve) => {
-        const qr = new QrCodeReader()
+      // Create ZXing reader
+      const hints = new Map()
+      hints.set(DecodeHintType.TRY_HARDER, true)
+      hints.set(DecodeHintType.POSSIBLE_FORMATS, [/* QR_CODE will be added by MultiFormatReader */])
 
-        // Set timeout for QR scanning
-        const timeout = setTimeout(() => {
-          logger.debug('QR Code scan timeout')
-          resolve(null)
-        }, 5000)
+      const reader = new MultiFormatReader()
+      reader.setHints(hints)
 
-        qr.callback = (err: any, value: any) => {
-          clearTimeout(timeout)
+      // Create luminance source and binary bitmap
+      const luminanceSource = new RGBLuminanceSource(
+        new Uint8ClampedArray(data),
+        info.width,
+        info.height,
+      )
+      const binaryBitmap = new BinaryBitmap(new HybridBinarizer(luminanceSource))
 
-          if (err) {
-            logger.debug({ error: err.message || err }, 'QR Code scan failed')
-            resolve(null)
-            return
-          }
+      try {
+        const result = reader.decode(binaryBitmap)
 
-          if (value && value.result) {
-            logger.info({ dataLength: value.result.length }, 'QR Code scanned successfully')
-            resolve({
-              type: 'QR',
-              data: value.result,
-              format: 'QR_CODE',
-              confidence: 0.9,
-            })
-          }
-          else {
-            logger.debug('No QR code found in image')
-            resolve(null)
-          }
+        logger.info({ dataLength: result.getText().length, format: result.getBarcodeFormat() }, 'QR Code scanned successfully')
+
+        return {
+          type: 'QR',
+          data: result.getText(),
+          format: `${result.getBarcodeFormat()}`,
+          confidence: 0.9,
         }
-
-        qr.decode(processedImage)
-      })
+      }
+      catch (error) {
+        if (error instanceof NotFoundException) {
+          logger.debug('No QR code found in image')
+        }
+        else {
+          logger.debug({ error: error instanceof Error ? error.message : error }, 'QR Code scan failed')
+        }
+        return null
+      }
     }
     catch (error: unknown) {
       logger.error({ error: error instanceof Error ? error.message : error }, 'Error scanning QR code')
@@ -96,23 +96,71 @@ export class BarcodeScannerService {
   }
 
   /**
-   * Scan barcode from image buffer
+   * Scan barcode from image buffer using ZXing (supports EAN-13, UPC, Code128, etc.)
    */
   static async scanBarcode(imageBuffer: Buffer): Promise<BarcodeResult | null> {
     try {
-      // For now, we'll use QR scanner for barcodes too
-      // In production, you might want to use a more specialized barcode library
-      const result = await this.scanQRCode(imageBuffer)
-
-      if (result) {
-        return {
-          ...result,
-          type: 'BARCODE',
-          format: 'BARCODE',
-        }
+      // Validate input
+      if (!imageBuffer || imageBuffer.length === 0) {
+        logger.warn('Empty image buffer provided')
+        return null
       }
 
-      return null
+      // Check image size (max 10MB)
+      if (imageBuffer.length > 10 * 1024 * 1024) {
+        logger.warn('Image too large, resizing')
+        imageBuffer = await sharp(imageBuffer)
+          .resize(1024, 1024, { fit: 'inside' })
+          .jpeg({ quality: 80 })
+          .toBuffer()
+      }
+
+      // Convert image to raw pixel data with better quality for 1D barcodes
+      const { data, info } = await sharp(imageBuffer)
+        .resize(1600, 1600, { fit: 'inside', withoutEnlargement: true })
+        .greyscale()
+        .normalize()
+        .sharpen()
+        .raw()
+        .toBuffer({ resolveWithObject: true })
+
+      // Create ZXing reader with all barcode formats
+      const hints = new Map()
+      hints.set(DecodeHintType.TRY_HARDER, true)
+      hints.set(DecodeHintType.PURE_BARCODE, false)
+
+      const reader = new MultiFormatReader()
+      reader.setHints(hints)
+
+      // Create luminance source and binary bitmap
+      const luminanceSource = new RGBLuminanceSource(
+        new Uint8ClampedArray(data),
+        info.width,
+        info.height,
+      )
+      const binaryBitmap = new BinaryBitmap(new HybridBinarizer(luminanceSource))
+
+      try {
+        const result = reader.decode(binaryBitmap)
+
+        logger.info({ dataLength: result.getText().length, format: result.getBarcodeFormat() }, 'Barcode scanned successfully')
+
+        return {
+          type: 'BARCODE',
+          data: result.getText(),
+          format: `${result.getBarcodeFormat()}`,
+          confidence: 0.9,
+        }
+      }
+      catch (error) {
+        if (error instanceof NotFoundException) {
+          logger.debug('No barcode found in image')
+        }
+        else {
+          logger.error({ error: error instanceof Error ? error.message : error }, 'Barcode scan failed')
+        }
+        return null
+      }
     }
     catch (error: unknown) {
       logger.error({ error: error instanceof Error ? error.message : error }, 'Error scanning barcode')

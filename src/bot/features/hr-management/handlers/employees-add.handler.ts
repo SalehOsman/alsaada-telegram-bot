@@ -1,14 +1,16 @@
 import type { Context } from 'grammy'
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
+import process from 'node:process'
+import { Buffer } from 'node:buffer'
 import { Composer, InlineKeyboard } from 'grammy'
 import { Database } from '../../../../modules/database/index.js'
-import { isPositiveNumber, isValidName, validateEgyptPhoneWithInfo, validateNationalIDWithInfo } from '../../../../modules/input/validators/index.js'
+import { isValidName, validateEgyptPhoneWithInfo, validateNationalIDWithInfo } from '../../../../modules/input/validators/index.js'
 import { Calendar } from '../../../../modules/ui/calendar.js'
 import { AttachmentsManager } from '../../../../modules/utils/attachments-manager.js'
 import { EmployeeCodeManager } from '../../../../modules/utils/employee-code-manager.js'
 import { generateNickname, isValidNickname } from '../../../../modules/utils/nickname-generator.js'
-import { getCurrentDate, getCurrentDateTimeFormatted } from '../../../../modules/utils/timezone-manager.js'
+import { getCurrentDate } from '../../../../modules/utils/timezone-manager.js'
 
 export const addEmployeeHandler = new Composer<Context>()
 
@@ -169,7 +171,7 @@ addEmployeeHandler.on('message:text', async (ctx, next) => {
             parse_mode: 'Markdown',
             reply_markup: keyboard,
           },
-        )
+  )
         break
       }
 
@@ -240,7 +242,7 @@ addEmployeeHandler.on('message:text', async (ctx, next) => {
             parse_mode: 'Markdown',
             reply_markup: keyboard,
           },
-        )
+  )
         break
       }
 
@@ -661,21 +663,21 @@ addEmployeeHandler.callbackQuery(/^hr:employee:add:startDate:(.+)$/, async (ctx)
 })
 
 // معالج رفع الصور - تحميل فعلي وحفظ في مجلد المرفقات
-addEmployeeHandler.on('message:photo', async (ctx) => {
+addEmployeeHandler.on('message:photo', async (ctx, next) => {
   const userId = ctx.from?.id
   if (!userId)
-    return
+    return next()
 
   const data = formData.get(userId)
+  // If no form data for this user, don't swallow the update — let other handlers try
   if (!data) {
-    await ctx.reply('❌ لم يتم العثور على بيانات النموذج.')
-    return
+    return next()
   }
 
   // فحص المرحلة
   if (data.step !== 'idCardFront' && data.step !== 'idCardBack') {
-    await ctx.reply('❌ لا يمكن رفع الصورة في هذه المرحلة.')
-    return
+    // Not the expected step for this handler — forward to next handler
+    return next()
   }
 
   try {
@@ -860,10 +862,10 @@ addEmployeeHandler.callbackQuery('confirm:save:employee', async (ctx) => {
           tempImageBuffer,
           'id-card-front.jpg',
           'front',
-        )
+    )
 
-        idCardFrontPath = AttachmentsManager.getRelativeFilePath(frontAttachment.filePath)
-        console.log('✅ تم حفظ صورة الوجه الأمامي:', idCardFrontPath)
+    idCardFrontPath = AttachmentsManager.getRelativeFilePath(frontAttachment.filePath)
+    console.warn('✅ تم حفظ صورة الوجه الأمامي:', idCardFrontPath)
 
         // حذف الملف المؤقت
         await fs.unlink(data.idCardFront)
@@ -885,10 +887,10 @@ addEmployeeHandler.callbackQuery('confirm:save:employee', async (ctx) => {
           tempImageBuffer,
           'id-card-back.jpg',
           'back',
-        )
+    )
 
-        idCardBackPath = AttachmentsManager.getRelativeFilePath(backAttachment.filePath)
-        console.log('✅ تم حفظ صورة الوجه الخلفي:', idCardBackPath)
+    idCardBackPath = AttachmentsManager.getRelativeFilePath(backAttachment.filePath)
+    console.warn('✅ تم حفظ صورة الوجه الخلفي:', idCardBackPath)
 
         // حذف الملف المؤقت
         await fs.unlink(data.idCardBack)
@@ -973,7 +975,7 @@ addEmployeeHandler.callbackQuery('confirm:save:employee', async (ctx) => {
           },
         })
 
-        console.log('✅ تم تعيين القيم الافتراضية للإجازات من الوظيفة')
+    console.warn('✅ تم تعيين القيم الافتراضية للإجازات من الوظيفة')
       }
     }
     catch (error) {
@@ -1024,12 +1026,18 @@ addEmployeeHandler.callbackQuery('confirm:save:employee', async (ctx) => {
         + '━━━━━━━━━━━━━━━━━━━━\n\n'
         + '🎉 مرحباً بالعضو الجديد في فريق العمل!'
 
-    // حذف جميع الرسائل من بداية التدفق حتى الآن
-    if (data.startMessageId) {
-      // نحاول الحصول على آخر رسالة في الشات (سنستخدم رقم كبير)
-      const endMsgId = data.startMessageId + 200 // افتراض أن التدفق لن يتجاوز 200 رسالة
-      console.error(`🗑️ حذف جميع الرسائل من ${data.startMessageId} إلى ${endMsgId}`)
-      await deleteAllMessagesBetween(ctx, data.startMessageId, endMsgId)
+    // حذف الرسائل المؤقتة المسجلة فقط
+    if (data.temporaryMessageIds && data.temporaryMessageIds.length > 0 && ctx.chat?.id) {
+      console.error(`🗑️ حذف ${data.temporaryMessageIds.length} رسالة مؤقتة`)
+      for (const msgId of data.temporaryMessageIds) {
+        try {
+          await ctx.api.deleteMessage(ctx.chat.id, msgId)
+        }
+        catch {
+          // تجاهل الأخطاء
+        }
+      }
+      console.error(`✅ انتهى حذف الرسائل المؤقتة`)
     }
 
     // إرسال الرسالة النهائية مع أزرار التنقل
@@ -1188,7 +1196,7 @@ async function sendReportToAdmins(ctx: any, employee: any, positionName: string,
       try {
         await ctx.api.sendMessage(Number(admin.telegramId), reportMessage, { parse_mode: 'Markdown' })
         sentCount++
-        console.error(`✅ تم إرسال التقرير إلى: ${admin.telegramId}`)
+        console.warn(`✅ تم إرسال التقرير إلى: ${admin.telegramId}`)
       }
       catch (error) {
         console.error(`❌ فشل الإرسال إلى ${admin.telegramId}:`, error)

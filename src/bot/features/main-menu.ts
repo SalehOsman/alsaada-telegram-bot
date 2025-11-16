@@ -168,21 +168,35 @@ mainMenuComposer.callbackQuery(/^menu:feature:(.+)$/, async (ctx) => {
       return
     }
 
-    // Build sub-menu (عرض قسم شئون العاملين بعمود واحد)
-    const keyboard = featureId === 'hr-management'
+    // Build sub-menu with single column for HR and Inventory
+    const singleColumnFeatures = ['hr-management', 'inventory-management']
+
+    const keyboard = singleColumnFeatures.includes(featureId)
       ? await MenuBuilder.buildSubMenu(featureId, ctx.dbUser, {
         maxButtonsPerRow: 1,
         showBackButton: true,
         backButtonText: '⬅️ رجوع للقائمة الرئيسية',
       })
       : await MenuBuilder.buildSubMenu(featureId, ctx.dbUser)
+
     if (!keyboard) {
       await ctx.answerCallbackQuery('⚠️ لا توجد أقسام فرعية متاحة')
       return
     }
 
-    const description = MenuBuilder.getFeatureDescription(featureId)
+    // Custom descriptions for specific features
+    let description: string | null = null
+    if (featureId === 'hr-management') {
+      description = '👥 **شئون العاملين**\n\nإدارة شاملة للموارد البشرية\n\n📌 الرجاء اختيار القسم المطلوب:'
+    }
+    else if (featureId === 'inventory-management') {
+      description = '📦 **المخازن**\n\nإدارة شاملة للمخازن والأصول\n\n📌 الرجاء اختيار القسم المطلوب:'
+    }
+    else {
+      description = MenuBuilder.getFeatureDescription(featureId)
+    }
 
+    // Update message with custom keyboard
     await ctx.editMessageText(description || feature.config.name, {
       parse_mode: 'Markdown',
       reply_markup: keyboard,

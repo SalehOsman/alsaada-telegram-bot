@@ -138,6 +138,50 @@ export interface SessionData {
     penaltyId: number
     step: 'waiting_reason'
   }
+  // Inventory management - Spare parts form
+  inventoryForm?: {
+    action: 'add' | 'edit' | 'search' | 'purchase' | 'issue' | 'transfer' | 'return'
+    step: string
+    warehouse?: 'spare-parts' | 'oils-greases' | 'diesel' | 'tools'
+    categoryId?: number
+    partId?: number
+    data?: any
+  }
+  // Inventory - Image upload
+  uploadingImageFor?: {
+    type: 'spare-part' | 'equipment'
+    id: number
+    barcode?: string
+  }
+  // Inventory - Audit system
+  currentAuditId?: number
+  auditItems?: number[]
+  currentAuditIndex?: number
+  currentAuditItem?: any
+  waitingForAuditQuantity?: boolean
+  waitingForSingleAuditCode?: boolean
+  waitingForSingleAuditBarcode?: boolean
+  waitingForSingleAuditName?: boolean
+  // Storage location form
+  locationForm?: {
+    prefix: string
+    backCallback: string
+    step: 'code' | 'nameAr' | 'nameEn' | 'edit'
+    code?: string
+    nameAr?: string
+    locationId?: number
+    field?: string
+  }
+  // Category form
+  categoryForm?: {
+    prefix: string
+    backCallback: string
+    step: 'code' | 'nameAr' | 'nameEn' | 'edit'
+    code?: string
+    nameAr?: string
+    categoryId?: number
+    field?: string
+  }
 }
 
 interface ExtendedContextFlavor {

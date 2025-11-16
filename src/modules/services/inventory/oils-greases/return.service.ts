@@ -1,0 +1,63 @@
+import { Database } from '#root/modules/database/index.js'
+
+export interface ReturnData {
+  itemId: number
+  quantity: number
+  returnedByEmployeeId?: number
+  returnedByEquipmentId?: number
+  reason: string
+  notes?: string
+  userId: number
+}
+
+export class OilsGreasesReturnService {
+  static async createReturn(data: ReturnData) {
+    // Validation
+    if (data.quantity <= 0) {
+      throw new Error(`❌ الكمية غير صحيحة\n\n📊 الكمية: ${data.quantity}\n✅ يجب أن تكون أكبر من صفر`)
+    }
+
+    const item = await Database.prisma.iNV_OilsGreasesItem.findUnique({
+      where: { id: data.itemId },
+    })
+
+    if (!item) throw new Error('❌ الصنف غير موجود')
+
+    const now = new Date()
+    const dateStr = now.toISOString().split('T')[0].replace(/-/g, '')
+    const count = await Database.prisma.iNV_OilsGreasesReturn.count({
+      where: {
+        returnDate: {
+          gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
+          lt: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999),
+        },
+      },
+    })
+    const returnNumber = `RET-OILS-${dateStr}-${String(count + 1).padStart(3, '0')}`
+
+    return Database.prisma.$transaction(async (tx) => {
+      await tx.iNV_OilsGreasesItem.update({
+        where: { id: data.itemId },
+        data: {
+          quantity: { increment: data.quantity },
+          totalValue: (item.quantity + data.quantity) * item.unitPrice,
+        },
+      })
+
+      const returnRecord = await tx.iNV_OilsGreasesReturn.create({
+        data: {
+          returnNumber,
+          itemId: data.itemId,
+          quantity: data.quantity,
+          returnedByEmployeeId: data.returnedByEmployeeId,
+          returnedByEquipmentId: data.returnedByEquipmentId,
+          reason: data.reason,
+          notes: data.notes,
+          createdBy: BigInt(data.userId),
+        },
+      })
+
+      return { success: true, return: returnRecord }
+    })
+  }
+}

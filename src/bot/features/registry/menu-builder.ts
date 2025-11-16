@@ -61,8 +61,22 @@ export class MenuBuilder {
       }
     }
 
+    // Filter features to only include those with accessible sub-features
+    const accessibleFeatures: FeatureConfig[] = [];
+    for (const featureConfig of allFeatures.values()) {
+      // System features like 'settings' might not have sub-features but should be shown
+      if (featureConfig.category === 'system' || !featureConfig.subFeatures || featureConfig.subFeatures.length === 0) {
+        accessibleFeatures.push(featureConfig);
+        continue;
+      }
+      const accessibleSubFeatures = await this._getAccessibleSubFeatures(featureConfig, userContext);
+      if (accessibleSubFeatures.length > 0) {
+        accessibleFeatures.push(featureConfig);
+      }
+    }
+
     // Sort features by order
-    const sortedFeatures = Array.from(allFeatures.values()).sort(
+    const sortedFeatures = accessibleFeatures.sort(
       (a, b) => (a.order ?? 0) - (b.order ?? 0),
     )
 
@@ -93,11 +107,6 @@ export class MenuBuilder {
 
   /**
    * Build sub-menu keyboard for a feature
-   * Updated Logic (Fixed):
-   * 1. SUPER_ADMIN: sees everything
-   * 2. DepartmentAdmin: sees all sub-features (assignment grants access)
-   * 3. SubFeatureAdmin: sees only assigned sub-features (assignment grants access)
-   * 4. Others: sees sub-features where userRole >= minRole
    */
   static async buildSubMenu(
     featureId: string,
@@ -108,21 +117,42 @@ export class MenuBuilder {
     if (!feature)
       return null
 
-    const isSystem = feature.config.category === 'system'
-    if (!isSystem && !feature.config.enabled)
-      return null
+    const accessibleSubFeatures = await this._getAccessibleSubFeatures(feature.config, userContext);
 
-    // Get all enabled sub-features
-    const allSubFeatures = feature.config.subFeatures?.filter(sf => sf.enabled !== false) || []
-    if (allSubFeatures.length === 0)
-      return null
+    if (accessibleSubFeatures.length === 0) {
+      return null;
+    }
+
+    // Sort by order
+    accessibleSubFeatures.sort((a, b) => (a.order ?? 999) - (b.order ?? 999))
+
+    return this.buildKeyboardFromSubFeatures(accessibleSubFeatures, featureId, options)
+  }
+
+  /**
+   * Get a list of sub-features accessible to the user within a feature.
+   */
+  private static async _getAccessibleSubFeatures(
+    featureConfig: FeatureConfig,
+    userContext: UserPermissionContext,
+  ): Promise<SubFeature[]> {
+    const featureId = featureConfig.id;
+    const isSystem = featureConfig.category === 'system';
+    if (!isSystem && !featureConfig.enabled) {
+      return [];
+    }
+
+    const allSubFeatures = featureConfig.subFeatures?.filter(sf => sf.enabled !== false) || [];
+    if (allSubFeatures.length === 0) {
+      return [];
+    }
 
     // 1. SUPER_ADMIN sees everything
     if (userContext.role === 'SUPER_ADMIN') {
-      return this.buildKeyboardFromSubFeatures(allSubFeatures.sort((a, b) => (a.order ?? 999) - (b.order ?? 999)), featureId, options)
+      return allSubFeatures;
     }
 
-    // 2. Check if user is DepartmentAdmin (sees all sub-features)
+    // 2. Check if user is DepartmentAdmin (sees most sub-features)
     const isDepartmentAdmin = await Database.prisma.departmentAdmin.findFirst({
       where: {
         telegramId: userContext.telegramId,
@@ -132,106 +162,53 @@ export class MenuBuilder {
           isEnabled: true,
         },
       },
-    })
+    });
 
-    const accessibleSubFeatures: SubFeature[] = []
+    const accessibleSubFeatures: SubFeature[] = [];
 
     if (isDepartmentAdmin) {
       // DepartmentAdmin: sees ALL sub-features EXCEPT those marked as superAdminOnly
       for (const subFeature of allSubFeatures) {
-        const subFeatureCode = `${featureId.replace('-management', '')}:${subFeature.id}`
+        const subFeatureConfigFromDb = await Database.prisma.subFeatureConfig.findUnique({
+          where: { code: subFeature.id },
+        });
 
-        // Check if this sub-feature is SUPER_ADMIN only
-        const subFeatureConfig = await Database.prisma.subFeatureConfig.findUnique({
-          where: { code: subFeatureCode },
-        })
-
-        // Skip SUPER_ADMIN only features unless user is also explicitly assigned
-        if (subFeatureConfig?.superAdminOnly) {
-          // Check if user is explicitly assigned to this specific sub-feature
+        if (subFeatureConfigFromDb?.superAdminOnly) {
+          // It's a super-admin only feature. A department admin can only see it
+          // if they are ALSO explicitly assigned as a sub-feature admin.
           const assignment = await Database.prisma.subFeatureAdmin.findFirst({
             where: {
               telegramId: userContext.telegramId,
               isActive: true,
               subFeature: {
-                code: subFeatureCode,
+                code: subFeature.id,
                 isEnabled: true,
               },
             },
-          })
-
+          });
           if (assignment) {
-            // Explicitly assigned → add it
-            accessibleSubFeatures.push(subFeature)
+            accessibleSubFeatures.push(subFeature);
           }
-          // else: skip it (SUPER_ADMIN only and not assigned)
-        }
-        else {
-          // Not SUPER_ADMIN only → DepartmentAdmin can see it
-          accessibleSubFeatures.push(subFeature)
+        } else {
+          // Not a super-admin only feature, so the department admin can see it.
+          accessibleSubFeatures.push(subFeature);
         }
       }
-    }
-    else {
-      // 3. Not DepartmentAdmin - check each sub-feature individually
+    } else {
+      // 3. Not DepartmentAdmin - check each sub-feature individually using the definitive PermissionService
+      const { PermissionService } = await import('#root/modules/permissions/permission-service.js');
       for (const subFeature of allSubFeatures) {
-        const subFeatureCode = `${featureId.replace('-management', '')}:${subFeature.id}`
-
-        // Check if user is assigned to this specific sub-feature
-        const assignment = await Database.prisma.subFeatureAdmin.findFirst({
-          where: {
-            telegramId: userContext.telegramId,
-            isActive: true,
-            subFeature: {
-              code: subFeatureCode,
-              isEnabled: true,
-            },
-          },
-          include: {
-            subFeature: true,
-          },
-        })
-
-        if (assignment) {
-          // SubFeatureAdmin: assigned to this sub-feature → add it
-          accessibleSubFeatures.push(subFeature)
-        }
-        else {
-          // 4. Not assigned - check minRole
-          const subFeatureConfig = await Database.prisma.subFeatureConfig.findUnique({
-            where: { code: subFeatureCode },
-          })
-
-          // If no SubFeatureConfig, fall back to department minRole or ADMIN
-          let minRole: string
-          if (!subFeatureConfig) {
-            // No config in database - check department's minRole
-            const departmentConfig = await Database.prisma.departmentConfig.findUnique({
-              where: { code: featureId },
-            })
-            minRole = departmentConfig?.minRole || 'ADMIN'
-          }
-          else {
-            minRole = subFeatureConfig.minRole || (subFeatureConfig.superAdminOnly ? 'SUPER_ADMIN' : 'ADMIN')
-          }
-
-          const { PermissionService } = await import('#root/modules/permissions/permission-service.js')
-
-          if (PermissionService.hasMinRole(userContext, minRole as any)) {
-            accessibleSubFeatures.push(subFeature)
-          }
+        // Construct the full sub-feature code for the permission service
+        const subFeatureCode = `${featureId.replace('-management', '')}:${subFeature.id}`;
+        const canAccess = await PermissionService.canAccessSubFeature(userContext, subFeatureCode);
+        if (canAccess) {
+          accessibleSubFeatures.push(subFeature);
         }
       }
     }
-
-    if (accessibleSubFeatures.length === 0)
-      return null
-
-    // Sort by order
-    accessibleSubFeatures.sort((a, b) => (a.order ?? 999) - (b.order ?? 999))
-
-    return this.buildKeyboardFromSubFeatures(accessibleSubFeatures, featureId, options)
+    return accessibleSubFeatures;
   }
+
 
   /**
    * Build keyboard from sub-features list

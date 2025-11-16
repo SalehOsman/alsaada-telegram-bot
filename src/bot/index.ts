@@ -125,7 +125,12 @@ export async function createBot(token: string, dependencies: Dependencies, botCo
   protectedBot.use(conversations())
   protectedBot.use(greetingConversation())
   protectedBot.use(joinRequestConversation())
-  protectedBot.use(sendNotificationConversation()) // MUST be registered with other conversations!
+  protectedBot.use(sendNotificationConversation())
+  
+  // Oils & Greases conversations
+  const { createConversation } = await import('@grammyjs/conversations')
+  const { editItemConversation } = await import('#root/bot/features/inventory-management/handlers/oils-greases/items/edit-item/edit-item.conversation.js')
+  protectedBot.use(createConversation(editItemConversation, 'editItemConversation'))
 
   // Register welcome feature specific handlers FIRST (commands and keyboard buttons)
   // This ensures main menu and profile buttons work immediately

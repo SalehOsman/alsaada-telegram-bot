@@ -155,6 +155,11 @@ model Project {
   equipmentInUse        Equipment[]       @relation("ProjectEquipment")
   shiftAssignments      ShiftAssignment[]
   equipmentUsageRecords EquipmentUsage[]
+  
+  // 🔗 نظام المخازن - Inventory System
+  sparePartTransactions INV_SparePartTransaction[] @relation("SparePartTransactionProject")
+  sparePartUsages       INV_SparePartUsage[]       @relation("SparePartUsageProject")
+  
   Company               Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([endDate])
@@ -627,6 +632,12 @@ model Employee {
 
   // نظام عقوبات التأخير
   appliedPenalties HR_AppliedPenalty[] @relation("EmployeeAppliedPenalties")
+
+  // 🔗 نظام المخازن - Inventory System
+  responsibleSpareParts    INV_SparePart[]            @relation("SparePartResponsible")
+  sparePartTransactions    INV_SparePartTransaction[] @relation("SparePartTransactionEmployee")
+  sparePartInstallations   INV_SparePartUsage[]       @relation("SparePartUsageInstaller")
+  oilsGreasesIssuances     INV_OilsGreasesIssuance[]  @relation("OilsGreasesIssuanceToEmployee")
 
   skills         Skill[]
   certifications Certification[]
@@ -1176,6 +1187,11 @@ model Equipment {
   maintenanceSchedules MaintenanceSchedule[]
   shiftAssignments     ShiftAssignment[]
   usageRecords         EquipmentUsage[]
+  
+  // 🔗 نظام المخازن - Inventory System
+  sparePartTransactions INV_SparePartTransaction[] @relation("SparePartTransactionEquipment")
+  sparePartUsages       INV_SparePartUsage[]       @relation("SparePartUsageEquipment")
+  oilsGreasesIssuances  INV_OilsGreasesIssuance[]  @relation("OilsGreasesIssuanceToEquipment")
 
   @@index([code])
   @@index([plateNumber])
@@ -2143,3 +2159,776 @@ model HR_Settings {
   
   @@map("HR_Settings")
 }
+
+// ═══════════════════════════════════════════════════════════
+// نظام مخزن قطع الغيار - Spare Parts Inventory System
+// ═══════════════════════════════════════════════════════════
+
+// 1️⃣ تصنيفات قطع الغيار (Equipment Categories)
+model INV_EquipmentCategory {
+  id          Int       @id @default(autoincrement())
+  code        String    @unique // "CAR", "LOADER", "BULLDOZER", "EXCAVATOR", "GENERAL"
+  nameAr      String // "سيارات"
+  nameEn      String? // "Cars"
+  description String?
+  icon        String? // 🚗, 🚜, 🏗️, 🔧
+  orderIndex  Int       @default(0)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  createdBy   BigInt?
+  updatedBy   BigInt?
+
+  // العلاقات
+  spareParts INV_SparePart[] @relation("CategorySpareParts")
+
+  @@index([code])
+  @@index([isActive])
+  @@index([orderIndex])
+  @@map("INV_EquipmentCategory")
+}
+
+// 2️⃣ مواقع التخزين (Storage Locations)
+model INV_StorageLocation {
+  id          Int       @id @default(autoincrement())
+  code        String    @unique // "CONT-1", "SHELF-A1", "RACK-5"
+  nameAr      String // "كرستر رقم 1 - كرفان العاملين"
+  nameEn      String? // "Container 1 - Workers Caravan"
+  locationType String  @default("SHELF") // "CONTAINER", "SHELF", "RACK", "ROOM", "VEHICLE"
+  locationArea String? // "مخزن رئيسي", "ورشة", "موقع العمل"
+  description  String?
+  capacity     Int? // السعة التخزينية (اختياري)
+  notes        String?
+  orderIndex   Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  createdBy    BigInt?
+  updatedBy    BigInt?
+
+  // العلاقات
+  spareParts INV_SparePart[] @relation("LocationSpareParts")
+  oilsGreasesItems INV_OilsGreasesItem[] @relation("OilsGreasesLocationItems")
+
+  @@index([code])
+  @@index([locationType])
+  @@index([isActive])
+  @@index([orderIndex])
+  @@map("INV_StorageLocation")
+}
+
+// 3️⃣ قطع الغيار (Spare Parts)
+model INV_SparePart {
+  id          Int    @id @default(autoincrement())
+  code        String @unique // "CAR-ENG-00123" (مُولّد تلقائياً)
+  barcode     String @unique // "6281234567890" (EAN-13)
+  
+  // معلومات أساسية
+  nameAr      String // "فلتر زيت محرك"
+  nameEn      String? // "Engine Oil Filter"
+  description String? // وصف تفصيلي
+  
+  // التصنيف والموقع
+  categoryId  Int // سيارات، لودار، بلدوزر...
+  locationId  Int? // موقع التخزين الحالي
+  
+  // الكميات
+  quantity         Int   @default(0) // الكمية الإجمالية الحالية
+  quantityNew      Int   @default(0) // الكمية الجديدة
+  quantityUsed     Int   @default(0) // الكمية المستعملة
+  quantityRefurbished Int @default(0) // الكمية المجددة
+  quantityImport   Int   @default(0) // الكمية المستوردة
+  minQuantity      Int   @default(5) // الحد الأدنى للتنبيه
+  maxQuantity      Int? // الحد الأقصى (اختياري)
+  reorderPoint     Int? // نقطة إعادة الطلب
+  unit             String @default("قطعة") // "قطعة", "عبوة", "طقم"
+  
+  // معلومات الموّرد والتكلفة
+  supplierName     String? // اسم المورد
+  supplierContact  String? // جوال/بريد المورد
+  lastPurchaseDate DateTime? // آخر تاريخ شراء
+  unitPrice        Float   @default(0) // سعر الوحدة
+  totalValue       Float   @default(0) // القيمة الإجمالية (quantity × unitPrice)
+  currency         String  @default("EGP")
+  
+  // معلومات تقنية
+  partNumber       String? // رقم القطعة من الشركة المصنعة
+  manufacturer     String? // الشركة المصنعة
+  model            String? // الموديل المتوافق
+  yearFrom         Int? // من سنة
+  yearTo           Int? // إلى سنة
+  specifications   Json? // مواصفات تقنية إضافية
+  
+  // الصور والملفات
+  imagePath        String? // مسار الصورة الرئيسية (uploads/inventory/spare-parts/{barcode}.jpg)
+  images           Json? // صور إضافية (array of paths)
+  documents        Json? // مستندات (فواتير، كتالوجات، إلخ)
+  
+  // الحالة الفيزيائية والتخزينية
+  condition        String  @default("NEW") // "NEW", "USED", "REFURBISHED"
+  status           String  @default("AVAILABLE") // "AVAILABLE", "OUT_OF_STOCK", "RESERVED", "DISCONTINUED", "DAMAGED"
+  
+  // إدارة التالف/الهوالك
+  isDamaged        Boolean  @default(false) // هل تالفة؟
+  damageDate       DateTime? // تاريخ التلف
+  damageReason     String? // سبب التلف
+  damageQuantity   Int      @default(0) // الكمية التالفة
+  damageValue      Float    @default(0) // قيمة الهوالك
+  disposalDate     DateTime? // تاريخ التخلص منها
+  disposalMethod   String? // طريقة التخلص: "SOLD", "RECYCLED", "DISCARDED"
+  disposalApprovedBy BigInt? // من وافق على التخلص
+  
+  // 🔗 الربط بالمعدات (Equipment)
+  compatibleEquipmentTypes Json? // [1, 5, 12] أنواع المعدات المتوافقة
+  
+  // 🔗 الربط بالحسابات (Accounting)
+  accountCode      String? // رمز الحساب
+  costCenterId     Int? // مركز التكلفة
+  
+  // 🔗 الربط بالصيانة (Maintenance)
+  maintenanceTypeId Int? // نوع الصيانة المستخدم فيها
+  averageLifespan   Int? // العمر الافتراضي (أيام/ساعات)
+  
+  // 🔗 الربط بالموظفين (Employees)
+  responsibleEmployeeId Int? // الموظف المسؤول عن الصنف
+  
+  notes            String? // ملاحظات عامة
+  
+  // معلومات التسجيل
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  createdBy        BigInt?
+  updatedBy        BigInt?
+  
+  // العلاقات
+  category         INV_EquipmentCategory @relation("CategorySpareParts", fields: [categoryId], references: [id])
+  location         INV_StorageLocation?  @relation("LocationSpareParts", fields: [locationId], references: [id])
+  responsibleEmployee Employee?          @relation("SparePartResponsible", fields: [responsibleEmployeeId], references: [id])
+  
+  transactions     INV_SparePartTransaction[] @relation("SparePartTransactions")
+  usageRecords     INV_SparePartUsage[]       @relation("SparePartUsages")
+  damageRecords    INV_DamageRecord[]         @relation("SparePartDamages")
+  
+  @@index([code])
+  @@index([barcode])
+  @@index([categoryId])
+  @@index([locationId])
+  @@index([status])
+  @@index([isActive])
+  @@index([quantity])
+  @@index([nameAr])
+  @@index([partNumber])
+  @@index([manufacturer])
+  @@index([responsibleEmployeeId])
+  @@index([categoryId, status])
+  @@index([locationId, status])
+  @@map("INV_SparePart")
+}
+
+// 4️⃣ حركات قطع الغيار (Transactions)
+model INV_SparePartTransaction {
+  id                Int      @id @default(autoincrement())
+  transactionNumber String   @unique // "TRX-20251109-001"
+  sparePartId       Int
+  
+  // نوع الحركة
+  transactionType   String // "IN" (إدخال), "OUT" (إخراج), "TRANSFER" (نقل), "ADJUST" (تسوية), "RETURN" (إرجاع)
+  
+  // الكميات
+  quantity          Int // الكمية المتحركة
+  quantityBefore    Int // الكمية قبل الحركة
+  quantityAfter     Int // الكمية بعد الحركة
+  
+  // التفاصيل حسب نوع الحركة
+  fromLocationId    Int? // من موقع (للنقل)
+  toLocationId      Int? // إلى موقع (للنقل)
+  
+  // معلومات إضافية
+  equipmentId       Int? // المعدة المستخدمة معها (اختياري)
+  projectId         Int? // المشروع المستخدمة فيه
+  employeeId        Int? // الموظف المستلم/المسلم
+  employeeName      String? // اسم الموظف (للحفظ المباشر)
+  employeeCode      String? // كود الموظف
+  
+  // بيانات الفاتورة (للإدخال)
+  invoiceNumber     String?
+  supplierName      String?
+  unitPrice         Float?
+  totalCost         Float?
+  
+  // السبب والملاحظات
+  reason            String? // سبب الحركة
+  notes             String?
+  attachments       Json? // مرفقات (صور الفاتورة، إلخ)
+  
+  // معلومات التسجيل
+  transactionDate   DateTime @default(now())
+  createdAt         DateTime @default(now())
+  createdBy         BigInt
+  approvedBy        BigInt?
+  approvedAt        DateTime?
+  
+  // العلاقات
+  sparePart         INV_SparePart @relation("SparePartTransactions", fields: [sparePartId], references: [id])
+  equipment         Equipment?    @relation("SparePartTransactionEquipment", fields: [equipmentId], references: [id])
+  project           Project?      @relation("SparePartTransactionProject", fields: [projectId], references: [id])
+  employee          Employee?     @relation("SparePartTransactionEmployee", fields: [employeeId], references: [id])
+  
+  @@index([transactionNumber])
+  @@index([sparePartId])
+  @@index([transactionType])
+  @@index([transactionDate])
+  @@index([createdBy])
+  @@index([employeeId])
+  @@index([equipmentId])
+  @@index([projectId])
+  @@index([sparePartId, transactionDate])
+  @@map("INV_SparePartTransaction")
+}
+
+// 5️⃣ استخدام قطع الغيار (Usage Records)
+model INV_SparePartUsage {
+  id             Int      @id @default(autoincrement())
+  sparePartId    Int
+  
+  // معلومات الاستخدام
+  equipmentId    Int? // المعدة المركب عليها
+  equipmentName  String? // اسم المعدة
+  equipmentCode  String? // كود المعدة
+  projectId      Int? // المشروع
+  projectName    String? // اسم المشروع
+  
+  // الكميات والتواريخ
+  quantity       Int
+  installDate    DateTime @default(now())
+  expectedLife   Int? // العمر المتوقع بالأيام/الساعات
+  
+  // الحالة
+  status         String   @default("IN_USE") // "IN_USE", "REPLACED", "FAILED"
+  replacedDate   DateTime?
+  failureReason  String?
+  
+  // معلومات الفني
+  installedBy    BigInt? // من قام بالتركيب (User ID)
+  installedByEmployeeId Int? // من قام بالتركيب (Employee ID)
+  installedByName String? // اسم الفني
+  notes          String?
+  
+  // معلومات التسجيل
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  
+  // العلاقات
+  sparePart      INV_SparePart @relation("SparePartUsages", fields: [sparePartId], references: [id])
+  equipment      Equipment?    @relation("SparePartUsageEquipment", fields: [equipmentId], references: [id])
+  project        Project?      @relation("SparePartUsageProject", fields: [projectId], references: [id])
+  installer      Employee?     @relation("SparePartUsageInstaller", fields: [installedByEmployeeId], references: [id])
+  
+  @@index([sparePartId])
+  @@index([equipmentId])
+  @@index([projectId])
+  @@index([status])
+  @@index([installDate])
+  @@index([installedByEmployeeId])
+  @@map("INV_SparePartUsage")
+}
+
+// 6️⃣ تنبيهات المخزون (Stock Alerts)
+model INV_StockAlert {
+  id           Int      @id @default(autoincrement())
+  sparePartId  Int
+  alertType    String // "LOW_STOCK", "OUT_OF_STOCK", "EXPIRED", "OVERSTOCK"
+  alertLevel   String   @default("WARNING") // "INFO", "WARNING", "CRITICAL"
+  message      String
+  currentValue Int? // القيمة الحالية (الكمية)
+  thresholdValue Int? // القيمة المحددة (الحد الأدنى)
+  isResolved   Boolean  @default(false)
+  resolvedAt   DateTime?
+  resolvedBy   BigInt?
+  createdAt    DateTime @default(now())
+  
+  @@index([sparePartId])
+  @@index([alertType])
+  @@index([alertLevel])
+  @@index([isResolved])
+  @@index([createdAt])
+  @@map("INV_StockAlert")
+}
+
+// 7️⃣ سجل الهوالك/التالف (Damage Records)
+model INV_DamageRecord {
+  id              Int      @id @default(autoincrement())
+  recordNumber    String   @unique // "DMG-20251109-001"
+  sparePartId     Int
+  
+  // تفاصيل التلف
+  damageType      String // "EXPIRED", "BROKEN", "DEFECTIVE", "WATER_DAMAGE", "CORROSION", "OTHER"
+  damageDate      DateTime @default(now())
+  discoveredBy    BigInt // من اكتشف التلف
+  
+  // الكميات والقيم
+  quantity        Int // الكمية التالفة
+  unitPrice       Float // سعر الوحدة وقت التلف
+  totalValue      Float // القيمة الإجمالية للهالك
+  
+  // الأسباب والتفاصيل
+  damageReason    String // سبب التلف التفصيلي
+  damageSeverity  String   @default("MEDIUM") // "LOW", "MEDIUM", "HIGH", "TOTAL_LOSS"
+  isRepairable    Boolean  @default(false) // هل قابلة للإصلاح؟
+  repairCost      Float? // تكلفة الإصلاح المتوقعة
+  
+  // الإجراءات المتخذة
+  actionTaken     String? // "REPAIR", "RECYCLE", "SELL_SCRAP", "DISPOSE", "PENDING"
+  actionDate      DateTime?
+  actionBy        BigInt?
+  recoveredValue  Float    @default(0) // القيمة المستردة (من بيع خردة مثلاً)
+  
+  // الموافقات
+  approvalStatus  String   @default("PENDING") // "PENDING", "APPROVED", "REJECTED"
+  approvedBy      BigInt?
+  approvedAt      DateTime?
+  rejectionReason String?
+  
+  // المرفقات والملاحظات
+  photos          Json? // صور التلف
+  documents       Json? // تقارير، فواتير إصلاح، إلخ
+  notes           String?
+  
+  // معلومات التسجيل
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // العلاقات
+  sparePart       INV_SparePart @relation("SparePartDamages", fields: [sparePartId], references: [id])
+  
+  @@index([recordNumber])
+  @@index([sparePartId])
+  @@index([damageType])
+  @@index([damageDate])
+  @@index([approvalStatus])
+  @@index([actionTaken])
+  @@index([discoveredBy])
+  @@index([sparePartId, damageDate])
+  @@map("INV_DamageRecord")
+}
+
+// 8️⃣ سجل التعديلات والتاريخ (Item History/Audit Log)
+model INV_ItemHistory {
+  id            Int      @id @default(autoincrement())
+  itemId        Int // معرف القطعة
+  itemType      String   @default("SPARE_PART") // "SPARE_PART", "EQUIPMENT", etc.
+  
+  // نوع العملية
+  action        String // "CREATE", "UPDATE", "DELETE", "RESTORE", "STATUS_CHANGE"
+  actionDetail  String? // تفاصيل إضافية عن العملية
+  
+  // البيانات
+  oldData       Json? // البيانات القديمة قبل التعديل
+  newData       Json? // البيانات الجديدة بعد التعديل
+  changedFields Json? // الحقول التي تم تغييرها فقط
+  
+  // معلومات المستخدم
+  performedBy   BigInt // من قام بالعملية
+  performedAt   DateTime @default(now())
+  ipAddress     String? // عنوان IP إذا كان متاح
+  userAgent     String? // معلومات الجهاز/المتصفح
+  
+  // ملاحظات وأسباب
+  notes         String? // ملاحظات على العملية
+  reason        String? // سبب التعديل/الحذف
+  
+  // معلومات إضافية
+  isAutomated   Boolean  @default(false) // هل العملية تلقائية أم يدوية
+  relatedRecordId Int? // معرف سجل مرتبط (مثل معرف المعاملة)
+  relatedRecordType String? // نوع السجل المرتبط
+  
+  @@index([itemId])
+  @@index([itemType])
+  @@index([action])
+  @@index([performedBy])
+  @@index([performedAt])
+  @@index([itemId, performedAt])
+  @@index([itemType, action])
+  @@map("INV_ItemHistory")
+}
+
+// 9️⃣ عمليات الجرد (Inventory Audit) - موحد لجميع المخازن
+model INV_InventoryAudit {
+  id              Int      @id @default(autoincrement())
+  auditNumber     String   @unique // "AUD-20251111-00001"
+  
+  // نوع المخزن - متعدد الاستخدامات ⭐
+  warehouseType   String   // "SPARE_PARTS", "FUEL", "OILS", "MATERIALS", etc.
+  
+  // نوع الجرد
+  auditType       String   // "FULL" (شامل), "CATEGORY" (فئة), "LOCATION" (موقع), "SINGLE_ITEM" (صنف واحد)
+  
+  // نطاق الجرد (حسب النوع)
+  categoryId      Int?     // للفئات
+  locationId      Int?     // للمواقع
+  itemId          Int?     // لصنف واحد
+  itemCode        String?  // كود الصنف (للسهولة)
+  
+  // الحالة
+  status          String   @default("IN_PROGRESS") // "IN_PROGRESS", "COMPLETED", "CANCELLED"
+  
+  // الإحصائيات
+  totalItems      Int      @default(0) // إجمالي الأصناف
+  itemsChecked    Int      @default(0) // الأصناف المجردة
+  itemsWithDiff   Int      @default(0) // الأصناف بها فروقات
+  
+  // إحصائيات الفروقات
+  totalShortage   Int      @default(0) // إجمالي العجز
+  totalSurplus    Int      @default(0) // إجمالي الزيادة
+  
+  // التواريخ
+  auditDate       DateTime @default(now())
+  startedAt       DateTime @default(now())
+  completedDate   DateTime?
+  
+  // المسؤول
+  createdBy       BigInt
+  completedBy     BigInt?
+  
+  // ملاحظات عامة
+  notes           String?
+  
+  // العناصر المجردة
+  items           INV_InventoryAuditItem[]
+  
+  @@index([auditNumber])
+  @@index([warehouseType])
+  @@index([status])
+  @@index([auditType])
+  @@index([auditDate])
+  @@index([createdBy])
+  @@index([warehouseType, status])
+  @@index([warehouseType, auditDate])
+  @@map("INV_InventoryAudit")
+}
+
+// 🔟 عناصر الجرد (Audit Items) - موحد لجميع المخازن
+model INV_InventoryAuditItem {
+  id                Int      @id @default(autoincrement())
+  auditId           Int
+  
+  // معرف الصنف - متعدد الاستخدامات ⭐
+  itemId            Int      // يمكن أن يكون sparePartId, fuelId, oilId, etc.
+  itemType          String   // "SPARE_PART", "FUEL", "OIL", "MATERIAL", etc.
+  itemCode          String   // كود الصنف
+  itemName          String   // اسم الصنف
+  
+  // الكميات الأساسية
+  systemQuantity    Int      // الكمية في النظام
+  actualQuantity    Int      // الكمية الفعلية المجردة
+  difference        Int      // الفرق (actual - system)
+  
+  // تفاصيل إضافية (JSON مرن) ⭐
+  // للقطع: {new: 5, used: 3, refurbished: 2}
+  // للسولار: {liters: 100, tank: "خزان 1"}
+  // للزيوت: {liters: 50, type: "10W-40"}
+  systemDetails     Json?    // تفاصيل الكمية في النظام
+  actualDetails     Json?    // تفاصيل الكمية الفعلية
+  
+  // الموقع والفئة
+  locationId        Int?
+  locationName      String?
+  categoryId        Int?
+  categoryName      String?
+  
+  // الوحدة
+  unit              String   @default("قطعة")
+  
+  // حالة الصنف
+  hasDiscrepancy    Boolean  @default(false) // هل يوجد فرق؟
+  discrepancyType   String?  // "SHORTAGE" (عجز), "SURPLUS" (زيادة), "MATCH" (متطابق)
+  
+  // ملاحظات خاصة بالصنف
+  notes             String?
+  
+  // التواريخ
+  checkedAt         DateTime @default(now())
+  
+  // العلاقة مع عملية الجرد
+  audit             INV_InventoryAudit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  
+  @@index([auditId])
+  @@index([itemType])
+  @@index([itemId])
+  @@index([hasDiscrepancy])
+  @@index([discrepancyType])
+  @@index([auditId, itemType])
+  @@index([auditId, hasDiscrepancy])
+  @@map("INV_InventoryAuditItem")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// 🛢️ مخزن الزيوت والشحوم (Oils & Greases Warehouse)
+// ═══════════════════════════════════════════════════════════════════
+
+// 1️⃣ أنواع الزيوت والشحوم (Category Types)
+model INV_OilsGreasesCategory {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique // "ENGINE-OIL", "GREASE", "HYDRAULIC-OIL", "GEAR-OIL"
+  nameAr      String // "زيت محرك", "شحم", "زيت هيدروليك", "زيت تروس"
+  nameEn      String? // "Engine Oil", "Grease", "Hydraulic Oil", "Gear Oil"
+  description String? // وصف النوع
+  prefix      String   @unique // "ENG", "GRS", "HYD", "GER" - للاستخدام في كود الصنف
+  
+  // الإعدادات
+  isActive    Boolean  @default(true)
+  displayOrder Int     @default(0) // ترتيب العرض
+  
+  // التواريخ
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdBy   BigInt?
+  updatedBy   BigInt?
+  
+  // العلاقات
+  items       INV_OilsGreasesItem[] @relation("CategoryItems")
+  
+  @@index([code])
+  @@index([isActive])
+  @@index([displayOrder])
+  @@map("INV_OilsGreasesCategory")
+}
+
+// 2️⃣ أصناف الزيوت والشحوم (Items)
+model INV_OilsGreasesItem {
+  id          Int    @id @default(autoincrement())
+  code        String @unique // "ENG-001", "GRS-001", "HYD-001" (مُولّد تلقائياً بناءً على النوع)
+  barcode     String? @unique // "6281234567890" (اختياري)
+  qrCode      String? // QR كود مُولّد تلقائياً أو يدوي
+  
+  // معلومات أساسية
+  nameAr      String // "زيت محرك 10W-40"
+  nameEn      String? // "Engine Oil 10W-40"
+  description String? // وصف تفصيلي
+  
+  // التصنيف والموقع
+  categoryId  Int // نوع الزيت/الشحم
+  locationId  Int? // موقع التخزين الحالي
+  
+  // الكميات
+  quantity         Float   @default(0) // الكمية الإجمالية الحالية
+  minQuantity      Float   @default(5) // الحد الأدنى للتنبيه
+  maxQuantity      Float? // الحد الأقصى (اختياري)
+  reorderPoint     Float? // نقطة إعادة الطلب
+  unit             String  @default("لتر") // "لتر", "جالون", "برميل", "كيلو", "قطعة", "علبة"
+  unitCapacity     Float? // سعة الوحدة باللتر (للجالون والبرميل)
+  
+  // معلومات الموّرد والتكلفة
+  supplierName     String? // اسم المورد
+  supplierContact  String? // جوال/بريد المورد
+  lastPurchaseDate DateTime? // آخر تاريخ شراء
+  unitPrice        Float   @default(0) // سعر الوحدة
+  totalValue       Float   @default(0) // القيمة الإجمالية (quantity × unitPrice)
+  currency         String  @default("EGP") // Egyptian Pound
+  
+  // معلومات تقنية
+  partNumber       String? // رقم القطعة من الشركة المصنعة
+  manufacturer     String? // الشركة المصنعة
+  specifications   Json? // مواصفات تقنية إضافية (viscosity, grade, etc.)
+  
+  // الصور والملفات
+  imagePath        String? // مسار الصورة الرئيسية للمنتج
+  images           Json? // صور إضافية (array of paths)
+  
+  // الحالة
+  status           String  @default("AVAILABLE") // "AVAILABLE", "OUT_OF_STOCK", "RESERVED", "DISCONTINUED"
+  
+  // تاريخ الصلاحية (للزيوت والشحوم)
+  expiryDate       DateTime? // تاريخ انتهاء الصلاحية
+  
+  notes            String? // ملاحظات عامة
+  
+  // معلومات التسجيل
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  createdBy        BigInt?
+  updatedBy        BigInt?
+  
+  // العلاقات
+  category         INV_OilsGreasesCategory @relation("CategoryItems", fields: [categoryId], references: [id])
+  location         INV_StorageLocation?    @relation("OilsGreasesLocationItems", fields: [locationId], references: [id])
+  purchases        INV_OilsGreasesPurchase[] @relation("ItemPurchases")
+  issuances        INV_OilsGreasesIssuance[] @relation("ItemIssuances")
+
+  @@index([code])
+  @@index([barcode])
+  @@index([categoryId])
+  @@index([locationId])
+  @@index([status])
+  @@index([isActive])
+  @@index([quantity])
+  @@index([nameAr])
+  @@index([expiryDate])
+  @@index([categoryId, status])
+  @@index([locationId, status])
+  @@map("INV_OilsGreasesItem")
+}
+
+// 3️⃣ عمليات الشراء (إدخال كميات)
+model INV_OilsGreasesPurchase {
+  id                Int      @id @default(autoincrement())
+  purchaseNumber    String   @unique // "PUR-OILS-20251110-001"
+  itemId            Int
+  
+  // الكميات والتكلفة
+  quantity          Float    // الكمية المشتراة
+  unitPrice         Float    // سعر الوحدة
+  totalCost         Float    // التكلفة الإجمالية
+  
+  // معلومات المورد والفاتورة
+  supplierName      String?
+  invoiceNumber     String?
+  invoiceDate       DateTime?
+  invoiceImagePath  String?  // مسار صورة الفاتورة
+  receiptImagePath  String?  // مسار صورة بون الاستلام
+  
+  // معلومات التسجيل
+  purchaseDate      DateTime @default(now())
+  notes             String?
+  createdAt         DateTime @default(now())
+  createdBy         BigInt
+  
+  // العلاقات
+  item              INV_OilsGreasesItem @relation("ItemPurchases", fields: [itemId], references: [id])
+  
+  @@index([purchaseNumber])
+  @@index([itemId])
+  @@index([purchaseDate])
+  @@index([createdBy])
+  @@map("INV_OilsGreasesPurchase")
+}
+
+// 4️⃣ عمليات الصرف (إخراج كميات)
+model INV_OilsGreasesIssuance {
+  id                Int      @id @default(autoincrement())
+  issuanceNumber    String   @unique // "ISS-OILS-20251110-001"
+  itemId            Int
+  
+  // الكمية المصروفة
+  quantity          Float
+  
+  // المستلم
+  issuedToEmployeeId Int?     // الموظف المستلم
+  issuedToEmployeeName String?
+  issuedToEquipmentId Int?    // المعدة المصروف لها
+  issuedToEquipmentCode String?
+  
+  // معلومات التسجيل
+  issuanceDate      DateTime @default(now())
+  purpose           String?  // الغرض من الصرف
+  notes             String?
+  createdAt         DateTime @default(now())
+  createdBy         BigInt
+  
+  // العلاقات
+  item              INV_OilsGreasesItem @relation("ItemIssuances", fields: [itemId], references: [id])
+  employee          Employee?           @relation("OilsGreasesIssuanceToEmployee", fields: [issuedToEmployeeId], references: [id])
+  equipment         Equipment?          @relation("OilsGreasesIssuanceToEquipment", fields: [issuedToEquipmentId], references: [id])
+  
+  @@index([issuanceNumber])
+  @@index([itemId])
+  @@index([issuanceDate])
+  @@index([createdBy])
+  @@index([issuedToEmployeeId])
+  @@index([issuedToEquipmentId])
+  @@map("INV_OilsGreasesIssuance")
+}
+
+// 5️⃣ عمليات النقل (Transfer)
+model INV_OilsGreasesTransfer {
+  id              Int      @id @default(autoincrement())
+  transferNumber  String   @unique // "TRF-OILS-20251110-001"
+  itemId          Int
+  
+  // الكمية المنقولة
+  quantity        Float
+  
+  // المواقع
+  fromLocationId  Int
+  toLocationId    Int
+  
+  // معلومات التسجيل
+  transferDate    DateTime @default(now())
+  reason          String?  // سبب النقل
+  notes           String?
+  createdAt       DateTime @default(now())
+  createdBy       BigInt
+  
+  @@index([transferNumber])
+  @@index([itemId])
+  @@index([transferDate])
+  @@index([createdBy])
+  @@index([fromLocationId])
+  @@index([toLocationId])
+  @@map("INV_OilsGreasesTransfer")
+}
+
+// 6️⃣ عمليات الإرجاع (Return)
+model INV_OilsGreasesReturn {
+  id                Int      @id @default(autoincrement())
+  returnNumber      String   @unique // "RET-OILS-20251110-001"
+  itemId            Int
+  
+  // الكمية المرتجعة
+  quantity          Float
+  
+  // المُرجِع
+  returnedByEmployeeId Int?     // الموظف المُرجِع
+  returnedByEmployeeName String?
+  returnedByEquipmentId Int?    // المعدة المُرجَع منها
+  returnedByEquipmentCode String?
+  
+  // معلومات التسجيل
+  returnDate        DateTime @default(now())
+  reason            String   // سبب الإرجاع (إلزامي)
+  condition         String   @default("GOOD") // "GOOD", "DAMAGED", "EXPIRED"
+  notes             String?
+  createdAt         DateTime @default(now())
+  createdBy         BigInt
+  
+  @@index([returnNumber])
+  @@index([itemId])
+  @@index([returnDate])
+  @@index([createdBy])
+  @@index([returnedByEmployeeId])
+  @@index([returnedByEquipmentId])
+  @@map("INV_OilsGreasesReturn")
+}
+
+// 7️⃣ عمليات الجرد والتسوية (Adjustment)
+model INV_OilsGreasesAdjustment {
+  id                 Int      @id @default(autoincrement())
+  adjustmentNumber   String   @unique // "ADJ-OILS-20251110-001"
+  itemId             Int
+  
+  // الكميات
+  quantityBefore     Float    // الكمية قبل التسوية
+  quantityAfter      Float    // الكمية بعد التسوية
+  quantityDifference Float    // الفرق (+ أو -)
+  adjustmentType     String   // "INCREASE" (زيادة), "DECREASE" (نقص)
+  
+  // معلومات التسجيل
+  adjustmentDate     DateTime @default(now())
+  reason             String   // سبب التسوية (إلزامي)
+  notes              String?
+  createdAt          DateTime @default(now())
+  createdBy          BigInt
+  approvedBy         BigInt?  // من وافق على التسوية
+  approvedAt         DateTime?
+  
+  @@index([adjustmentNumber])
+  @@index([itemId])
+  @@index([adjustmentDate])
+  @@index([adjustmentType])
+  @@index([createdBy])
+  @@index([approvedBy])
+  @@map("INV_OilsGreasesAdjustment")
+}
+

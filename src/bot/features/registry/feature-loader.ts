@@ -33,7 +33,25 @@ export class FeatureLoader {
     }
 
     try {
-      const items = readdirSync(this.basePath)
+      let items = readdirSync(this.basePath)
+
+      // ✅ FIX للمشكلة #8: ترتيب تحميل الميزات
+      // inventory-management يجب أن يُحمل قبل hr-management
+      // لأن كلاهما يستخدم on('message:text') handlers
+      items = items.sort((a, b) => {
+        // inventory-management → أولوية 1 (يُحمل أولاً)
+        if (a === 'inventory-management')
+          return -1
+        if (b === 'inventory-management')
+          return 1
+        // hr-management → أولوية 2
+        if (a === 'hr-management')
+          return -1
+        if (b === 'hr-management')
+          return 1
+        // الباقي alphabetically
+        return a.localeCompare(b)
+      })
 
       for (const item of items) {
         const itemPath = join(this.basePath, item)
