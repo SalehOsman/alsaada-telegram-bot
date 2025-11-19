@@ -19,20 +19,18 @@ export class OilsGreasesTransferService {
       throw new Error('❌ عملية نقل غير صحيحة\n\n❗ لا يمكن النقل إلى نفس الموقع')
     }
 
-    const item = await Database.prisma.iNV_OilsGreasesItem.findUnique({
+    const item = await Database.prisma.iNV_Item.findUnique({
       where: { id: data.itemId },
     })
 
     if (!item) throw new Error('❌ الصنف غير موجود')
-    if (item.locationId !== data.fromLocationId) {
-      throw new Error('❌ الصنف غير موجود في الموقع المحدد')
-    }
 
     const now = new Date()
     const dateStr = now.toISOString().split('T')[0].replace(/-/g, '')
-    const count = await Database.prisma.iNV_OilsGreasesTransfer.count({
+    const count = await Database.prisma.iNV_Transaction.count({
       where: {
-        transferDate: {
+        transactionType: 'TRANSFER',
+        createdAt: {
           gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
           lt: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999),
         },
@@ -41,18 +39,51 @@ export class OilsGreasesTransferService {
     const transferNumber = `TRF-OILS-${dateStr}-${String(count + 1).padStart(3, '0')}`
 
     return Database.prisma.$transaction(async (tx) => {
-      await tx.iNV_OilsGreasesItem.update({
-        where: { id: data.itemId },
-        data: { locationId: data.toLocationId },
+      // Check stock at source location
+      const fromStock = await tx.iNV_Stock.findFirst({
+        where: { itemId: data.itemId, locationId: data.fromLocationId }
       })
 
-      const transfer = await tx.iNV_OilsGreasesTransfer.create({
+      if (!fromStock || fromStock.quantity < data.quantity) {
+        throw new Error(`❌ الكمية غير كافية في الموقع المصدر`)
+      }
+
+      // Decrease from source
+      await tx.iNV_Stock.update({
+        where: { id: fromStock.id },
+        data: { quantity: { decrement: data.quantity } }
+      })
+
+      // Increase to destination (or create if not exists)
+      const toStock = await tx.iNV_Stock.findFirst({
+        where: { itemId: data.itemId, locationId: data.toLocationId }
+      })
+
+      if (toStock) {
+        await tx.iNV_Stock.update({
+          where: { id: toStock.id },
+          data: { quantity: { increment: data.quantity } }
+        })
+      } else {
+        await tx.iNV_Stock.create({
+          data: {
+            itemId: data.itemId,
+            locationId: data.toLocationId,
+            quantity: data.quantity,
+            createdBy: BigInt(data.userId)
+          }
+        })
+      }
+
+      // Create transfer transaction
+      const transfer = await tx.iNV_Transaction.create({
         data: {
-          transferNumber,
+          transactionNumber: transferNumber,
+          transactionType: 'TRANSFER',
           itemId: data.itemId,
-          quantity: data.quantity,
-          fromLocationId: data.fromLocationId,
+          locationId: data.fromLocationId, // Source location
           toLocationId: data.toLocationId,
+          quantity: data.quantity,
           notes: data.notes,
           createdBy: BigInt(data.userId),
         },

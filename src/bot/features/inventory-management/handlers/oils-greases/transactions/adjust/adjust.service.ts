@@ -5,7 +5,7 @@ import { Database } from '#root/modules/database/index.js'
 
 export class AdjustService {
   static async getItems() {
-    return Database.prisma.iNV_OilsGreasesItem.findMany({
+    return Database.prisma.iNV_Item.findMany({
       where: { isActive: true },
       include: { category: true, location: true },
       orderBy: { nameAr: 'asc' },
@@ -13,7 +13,7 @@ export class AdjustService {
   }
 
   static async getItemsByCategory(categoryId: number) {
-    return Database.prisma.iNV_OilsGreasesItem.findMany({
+    return Database.prisma.iNV_Item.findMany({
       where: { isActive: true, categoryId },
       include: { category: true, location: true },
       orderBy: { nameAr: 'asc' },
@@ -21,7 +21,7 @@ export class AdjustService {
   }
 
   static async getItemsByLocation(locationId: number) {
-    return Database.prisma.iNV_OilsGreasesItem.findMany({
+    return Database.prisma.iNV_Item.findMany({
       where: { isActive: true, locationId },
       include: { category: true, location: true },
       orderBy: { nameAr: 'asc' },

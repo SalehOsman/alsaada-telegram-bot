@@ -39,7 +39,7 @@ function formatQuantityDetails(item: any): string {
  */
 async function generateInternalCode(categoryCode: string): Promise<string> {
   // جلب آخر رقم مستخدم لهذا التصنيف
-  const lastItem = await Database.prisma.iNV_SparePart.findFirst({
+  const lastItem = await Database.prisma.iNV_Item.findFirst({
     where: {
       code: {
         startsWith: `${categoryCode}-`,
@@ -183,7 +183,7 @@ sparePartsItemsHandler.callbackQuery(/^sp:items:add:confirm-barcode:(.+)$/, asyn
   const barcode = ctx.match![1]
 
   // التحقق من عدم تكرار الباركود
-  const existing = await Database.prisma.iNV_SparePart.findUnique({
+  const existing = await Database.prisma.iNV_Item.findUnique({
     where: { barcode },
     include: { location: true },
   })
@@ -345,7 +345,7 @@ sparePartsItemsHandler.on('message:photo', async (ctx, next) => {
 
       if (state.action === 'add') {
         // check duplicate
-        const existing = await Database.prisma.iNV_SparePart.findUnique({
+        const existing = await Database.prisma.iNV_Item.findUnique({
           where: { barcode: scanned },
           include: { location: true },
         })
@@ -390,7 +390,7 @@ sparePartsItemsHandler.on('message:photo', async (ctx, next) => {
 
       // search flow stored under data.flow === 'search'
       if (state.data && state.data.flow === 'search') {
-        const item = await Database.prisma.iNV_SparePart.findUnique({
+        const item = await Database.prisma.iNV_Item.findUnique({
           where: { barcode: scanned },
           include: {
             category: true,
@@ -643,7 +643,7 @@ sparePartsItemsHandler.on('message:text', async (ctx, next) => {
       }
 
       // Get categories for selection
-      const categories = await Database.prisma.iNV_EquipmentCategory.findMany({
+      const categories = await Database.prisma.equipmentCategory.findMany({
         where: { isActive: true },
         orderBy: { orderIndex: 'asc' },
       })
@@ -788,7 +788,7 @@ sparePartsItemsHandler.on('message:text', async (ctx, next) => {
       const itemId = state.data.itemId
       const oldValue = state.data.currentValue
 
-      await Database.prisma.iNV_SparePart.update({
+      await Database.prisma.iNV_Item.update({
         where: { id: itemId },
         data: { nameAr: text },
       })
@@ -823,7 +823,7 @@ sparePartsItemsHandler.on('message:text', async (ctx, next) => {
       const itemId = state.data.itemId
       const oldValue = state.data.currentValue
 
-      const item = await Database.prisma.iNV_SparePart.findUnique({
+      const item = await Database.prisma.iNV_Item.findUnique({
         where: { id: itemId },
       })
 
@@ -834,7 +834,7 @@ sparePartsItemsHandler.on('message:text', async (ctx, next) => {
 
       const newTotalValue = quantity * item.unitPrice
 
-      await Database.prisma.iNV_SparePart.update({
+      await Database.prisma.iNV_Item.update({
         where: { id: itemId },
         data: {
           quantity,
@@ -873,7 +873,7 @@ sparePartsItemsHandler.on('message:text', async (ctx, next) => {
       const itemId = state.data.itemId
       const oldValue = state.data.currentValue
 
-      const item = await Database.prisma.iNV_SparePart.findUnique({
+      const item = await Database.prisma.iNV_Item.findUnique({
         where: { id: itemId },
       })
 
@@ -882,7 +882,7 @@ sparePartsItemsHandler.on('message:text', async (ctx, next) => {
         return
       }
 
-      await Database.prisma.iNV_SparePart.update({
+      await Database.prisma.iNV_Item.update({
         where: { id: itemId },
         data: {
           minQuantity,
@@ -923,7 +923,7 @@ sparePartsItemsHandler.on('message:text', async (ctx, next) => {
       const itemId = state.data.itemId
       const oldValue = state.data.currentValue
 
-      const item = await Database.prisma.iNV_SparePart.findUnique({
+      const item = await Database.prisma.iNV_Item.findUnique({
         where: { id: itemId },
       })
 
@@ -934,7 +934,7 @@ sparePartsItemsHandler.on('message:text', async (ctx, next) => {
 
       const newTotalValue = item.quantity * price
 
-      await Database.prisma.iNV_SparePart.update({
+      await Database.prisma.iNV_Item.update({
         where: { id: itemId },
         data: {
           unitPrice: price,
@@ -972,7 +972,7 @@ sparePartsItemsHandler.on('message:text', async (ctx, next) => {
         newNotes = null
       }
 
-      await Database.prisma.iNV_SparePart.update({
+      await Database.prisma.iNV_Item.update({
         where: { id: itemId },
         data: { notes: newNotes },
       })
@@ -1005,7 +1005,7 @@ sparePartsItemsHandler.on('message:text', async (ctx, next) => {
     if (state.step === 'search_by_barcode') {
       const barcode = text.trim()
 
-      const item = await Database.prisma.iNV_SparePart.findUnique({
+      const item = await Database.prisma.iNV_Item.findUnique({
         where: { barcode },
         include: {
           category: true,
@@ -1109,7 +1109,7 @@ sparePartsItemsHandler.on('message:text', async (ctx, next) => {
     if (state.step === 'search_by_code') {
       const code = text.trim().toUpperCase()
 
-      const item = await Database.prisma.iNV_SparePart.findUnique({
+      const item = await Database.prisma.iNV_Item.findUnique({
         where: { code },
         include: {
           category: true,
@@ -1213,7 +1213,7 @@ sparePartsItemsHandler.on('message:text', async (ctx, next) => {
     if (state.step === 'search_by_name') {
       const searchTerm = text.trim()
 
-      const items = await Database.prisma.iNV_SparePart.findMany({
+      const items = await Database.prisma.iNV_Item.findMany({
         where: {
           OR: [
             { nameAr: { contains: searchTerm } },
@@ -1410,7 +1410,7 @@ sparePartsItemsHandler.callbackQuery('sp:items:add:save', async (ctx) => {
         quantityByCondition.quantityNew = quantity
     }
 
-    const sparePart = await Database.prisma.iNV_SparePart.create({
+    const sparePart = await Database.prisma.iNV_Item.create({
       data: {
         barcode: data.barcode!,
         code: data.code!,
@@ -1474,7 +1474,7 @@ sparePartsItemsHandler.callbackQuery(/^sp:items:add:select_category:(\d+)$/, asy
   const categoryId = Number.parseInt(ctx.match![1], 10)
 
   // جلب التصنيف المختار لأخذ الكود
-  const category = await Database.prisma.iNV_EquipmentCategory.findUnique({
+  const category = await Database.prisma.equipmentCategory.findUnique({
     where: { id: categoryId },
   })
 
@@ -1685,7 +1685,7 @@ sparePartsItemsHandler.callbackQuery('sp:items:search:category', async (ctx) => 
   await ctx.answerCallbackQuery()
 
   // جلب التصنيفات
-  const categories = await Database.prisma.iNV_EquipmentCategory.findMany({
+  const categories = await Database.prisma.equipmentCategory.findMany({
     where: { isActive: true },
     orderBy: { nameAr: 'asc' },
     take: 20,
@@ -1732,7 +1732,7 @@ sparePartsItemsHandler.callbackQuery(/^sp:items:by-category:(\d+)$/, async (ctx)
 
   const categoryId = Number.parseInt(ctx.match![1], 10)
 
-  const category = await Database.prisma.iNV_EquipmentCategory.findUnique({
+  const category = await Database.prisma.equipmentCategory.findUnique({
     where: { id: categoryId },
   })
 
@@ -1741,7 +1741,7 @@ sparePartsItemsHandler.callbackQuery(/^sp:items:by-category:(\d+)$/, async (ctx)
     return
   }
 
-  const items = await Database.prisma.iNV_SparePart.findMany({
+  const items = await Database.prisma.iNV_Item.findMany({
     where: {
       categoryId,
       isActive: true,
@@ -1799,7 +1799,7 @@ sparePartsItemsHandler.callbackQuery(/^sp:items:view:(\d+)$/, async (ctx) => {
 
   const itemId = Number.parseInt(ctx.match![1], 10)
 
-  const item = await Database.prisma.iNV_SparePart.findUnique({
+  const item = await Database.prisma.iNV_Item.findUnique({
     where: { id: itemId },
     include: {
       category: true,
@@ -1924,7 +1924,7 @@ sparePartsItemsHandler.callbackQuery(/^sp:items:images:(\d+)$/, async (ctx) => {
 
   const itemId = Number.parseInt(ctx.match![1], 10)
 
-  const item = await Database.prisma.iNV_SparePart.findUnique({
+  const item = await Database.prisma.iNV_Item.findUnique({
     where: { id: itemId },
   })
 
@@ -2019,7 +2019,7 @@ sparePartsItemsHandler.callbackQuery(/^sp:items:edit:(\d+)$/, async (ctx) => {
 
   const itemId = Number.parseInt(ctx.match![1], 10)
 
-  const item = await Database.prisma.iNV_SparePart.findUnique({
+  const item = await Database.prisma.iNV_Item.findUnique({
     where: { id: itemId },
     include: {
       category: true,
@@ -2072,7 +2072,7 @@ sparePartsItemsHandler.callbackQuery(/^sp:items:edit:(\d+):name$/, async (ctx) =
 
   const itemId = Number.parseInt(ctx.match![1], 10)
 
-  const item = await Database.prisma.iNV_SparePart.findUnique({
+  const item = await Database.prisma.iNV_Item.findUnique({
     where: { id: itemId },
   })
 
@@ -2105,7 +2105,7 @@ sparePartsItemsHandler.callbackQuery(/^sp:items:edit:(\d+):quantity$/, async (ct
 
   const itemId = Number.parseInt(ctx.match![1], 10)
 
-  const item = await Database.prisma.iNV_SparePart.findUnique({
+  const item = await Database.prisma.iNV_Item.findUnique({
     where: { id: itemId },
   })
 
@@ -2138,7 +2138,7 @@ sparePartsItemsHandler.callbackQuery(/^sp:items:edit:(\d+):minQuantity$/, async 
 
   const itemId = Number.parseInt(ctx.match![1], 10)
 
-  const item = await Database.prisma.iNV_SparePart.findUnique({
+  const item = await Database.prisma.iNV_Item.findUnique({
     where: { id: itemId },
   })
 
@@ -2171,7 +2171,7 @@ sparePartsItemsHandler.callbackQuery(/^sp:items:edit:(\d+):price$/, async (ctx) 
 
   const itemId = Number.parseInt(ctx.match![1], 10)
 
-  const item = await Database.prisma.iNV_SparePart.findUnique({
+  const item = await Database.prisma.iNV_Item.findUnique({
     where: { id: itemId },
   })
 
@@ -2204,7 +2204,7 @@ sparePartsItemsHandler.callbackQuery(/^sp:items:edit:(\d+):category$/, async (ct
 
   const itemId = Number.parseInt(ctx.match![1], 10)
 
-  const item = await Database.prisma.iNV_SparePart.findUnique({
+  const item = await Database.prisma.iNV_Item.findUnique({
     where: { id: itemId },
     include: { category: true },
   })
@@ -2215,7 +2215,7 @@ sparePartsItemsHandler.callbackQuery(/^sp:items:edit:(\d+):category$/, async (ct
   }
 
   // جلب التصنيفات
-  const categories = await Database.prisma.iNV_EquipmentCategory.findMany({
+  const categories = await Database.prisma.equipmentCategory.findMany({
     where: { isActive: true },
     orderBy: { nameAr: 'asc' },
   })
@@ -2251,12 +2251,12 @@ sparePartsItemsHandler.callbackQuery(/^sp:items:edit:(\d+):category:(\d+)$/, asy
   const categoryId = Number.parseInt(ctx.match![2], 10)
 
   try {
-    const item = await Database.prisma.iNV_SparePart.findUnique({
+    const item = await Database.prisma.iNV_Item.findUnique({
       where: { id: itemId },
       include: { category: true },
     })
 
-    const newCategory = await Database.prisma.iNV_EquipmentCategory.findUnique({
+    const newCategory = await Database.prisma.equipmentCategory.findUnique({
       where: { id: categoryId },
     })
 
@@ -2266,7 +2266,7 @@ sparePartsItemsHandler.callbackQuery(/^sp:items:edit:(\d+):category:(\d+)$/, asy
     }
 
     // تحديث التصنيف
-    await Database.prisma.iNV_SparePart.update({
+    await Database.prisma.iNV_Item.update({
       where: { id: itemId },
       data: { categoryId },
     })
@@ -2298,7 +2298,7 @@ sparePartsItemsHandler.callbackQuery(/^sp:items:edit:(\d+):location$/, async (ct
 
   const itemId = Number.parseInt(ctx.match![1], 10)
 
-  const item = await Database.prisma.iNV_SparePart.findUnique({
+  const item = await Database.prisma.iNV_Item.findUnique({
     where: { id: itemId },
     include: { location: true },
   })
@@ -2345,7 +2345,7 @@ sparePartsItemsHandler.callbackQuery(/^sp:items:edit:(\d+):location:(\d+)$/, asy
   const locationId = Number.parseInt(ctx.match![2], 10)
 
   try {
-    const item = await Database.prisma.iNV_SparePart.findUnique({
+    const item = await Database.prisma.iNV_Item.findUnique({
       where: { id: itemId },
       include: { location: true },
     })
@@ -2360,7 +2360,7 @@ sparePartsItemsHandler.callbackQuery(/^sp:items:edit:(\d+):location:(\d+)$/, asy
     }
 
     // تحديث الموقع
-    await Database.prisma.iNV_SparePart.update({
+    await Database.prisma.iNV_Item.update({
       where: { id: itemId },
       data: { locationId },
     })
@@ -2392,7 +2392,7 @@ sparePartsItemsHandler.callbackQuery(/^sp:items:edit:(\d+):condition$/, async (c
 
   const itemId = Number.parseInt(ctx.match![1], 10)
 
-  const item = await Database.prisma.iNV_SparePart.findUnique({
+  const item = await Database.prisma.iNV_Item.findUnique({
     where: { id: itemId },
   })
 
@@ -2440,7 +2440,7 @@ sparePartsItemsHandler.callbackQuery(/^sp:items:edit:(\d+):condition:(NEW|IMPORT
   const newCondition = ctx.match![2] as 'NEW' | 'IMPORT' | 'USED'
 
   try {
-    const item = await Database.prisma.iNV_SparePart.findUnique({
+    const item = await Database.prisma.iNV_Item.findUnique({
       where: { id: itemId },
     })
 
@@ -2459,7 +2459,7 @@ sparePartsItemsHandler.callbackQuery(/^sp:items:edit:(\d+):condition:(NEW|IMPORT
     const newConditionObj = conditions.find(c => c.value === newCondition)
 
     // تحديث الحالة
-    await Database.prisma.iNV_SparePart.update({
+    await Database.prisma.iNV_Item.update({
       where: { id: itemId },
       data: { condition: newCondition },
     })
@@ -2491,7 +2491,7 @@ sparePartsItemsHandler.callbackQuery(/^sp:items:edit:(\d+):notes$/, async (ctx) 
 
   const itemId = Number.parseInt(ctx.match![1], 10)
 
-  const item = await Database.prisma.iNV_SparePart.findUnique({
+  const item = await Database.prisma.iNV_Item.findUnique({
     where: { id: itemId },
   })
 
@@ -2525,7 +2525,7 @@ sparePartsItemsHandler.callbackQuery(/^sp:items:delete:(\d+)$/, async (ctx) => {
 
   const itemId = Number.parseInt(ctx.match![1], 10)
 
-  const item = await Database.prisma.iNV_SparePart.findUnique({
+  const item = await Database.prisma.iNV_Item.findUnique({
     where: { id: itemId },
   })
 
@@ -2562,7 +2562,7 @@ sparePartsItemsHandler.callbackQuery(/^sp:items:delete:confirm:(\d+)$/, async (c
   const itemId = Number.parseInt(ctx.match![1], 10)
 
   try {
-    const item = await Database.prisma.iNV_SparePart.findUnique({
+    const item = await Database.prisma.iNV_Item.findUnique({
       where: { id: itemId },
       include: {
         category: true,
@@ -2576,7 +2576,7 @@ sparePartsItemsHandler.callbackQuery(/^sp:items:delete:confirm:(\d+)$/, async (c
     }
 
     // حذف ناعم - تحديث isActive إلى false
-    await Database.prisma.iNV_SparePart.update({
+    await Database.prisma.iNV_Item.update({
       where: { id: itemId },
       data: {
         isActive: false,
@@ -2652,7 +2652,7 @@ sparePartsItemsHandler.callbackQuery(/^sp:items:list(?::(\d+))?$/, async (ctx) =
   const skip = (page - 1) * pageSize
 
   const [items, total] = await Promise.all([
-    Database.prisma.iNV_SparePart.findMany({
+    Database.prisma.iNV_Item.findMany({
       where: { isActive: true },
       include: {
         category: true,
@@ -2661,7 +2661,7 @@ sparePartsItemsHandler.callbackQuery(/^sp:items:list(?::(\d+))?$/, async (ctx) =
       skip,
       take: pageSize,
     }),
-    Database.prisma.iNV_SparePart.count({
+    Database.prisma.iNV_Item.count({
       where: { isActive: true },
     }),
   ])
@@ -2829,7 +2829,7 @@ async function showFinalConfirmation(ctx: any) {
   const data = state.data
 
   // Get category and location details
-  const category = await Database.prisma.iNV_EquipmentCategory.findUnique({
+  const category = await Database.prisma.equipmentCategory.findUnique({
     where: { id: data.categoryId },
   })
   const location = data.locationId
@@ -2929,7 +2929,7 @@ sparePartsItemsHandler.callbackQuery('sp:items:add:confirm_save', async (ctx) =>
     }
 
     // Save to database
-    const newItem = await Database.prisma.iNV_SparePart.create({
+    const newItem = await Database.prisma.iNV_Item.create({
       data: {
         barcode: data.barcode,
         code: data.code,
@@ -2956,7 +2956,7 @@ sparePartsItemsHandler.callbackQuery('sp:items:add:confirm_save', async (ctx) =>
     ctx.session.inventoryForm = undefined
 
     // Get category and location for report
-    const category = await Database.prisma.iNV_EquipmentCategory.findUnique({
+    const category = await Database.prisma.equipmentCategory.findUnique({
       where: { id: data.categoryId },
     })
     const location = data.locationId

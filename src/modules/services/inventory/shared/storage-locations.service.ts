@@ -87,16 +87,16 @@ export class StorageLocationsService {
     warehouse: 'oils-greases' | 'spare-parts',
     locationId: number
   ) {
-    if (warehouse === 'oils-greases') {
-      return await Database.prisma.iNV_OilsGreasesItem.findMany({
-        where: { locationId },
-        include: { category: true }
-      })
-    } else {
-      return await Database.prisma.iNV_SparePart.findMany({
-        where: { locationId },
-        include: { category: true }
-      })
-    }
+    // Get stocks at this location, then get their items
+    const stocks = await Database.prisma.iNV_Stock.findMany({
+      where: { locationId },
+      include: { 
+        item: { 
+          include: { category: true } 
+        } 
+      }
+    })
+
+    return stocks.map(stock => stock.item)
   }
 }

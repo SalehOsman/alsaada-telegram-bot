@@ -17,7 +17,7 @@ export class SearchItemService {
   }
 
   static async searchByCategory(categoryId: number) {
-    return Database.prisma.iNV_OilsGreasesItem.findMany({
+    return Database.prisma.iNV_Item.findMany({
       where: {
         categoryId,
         isActive: true,

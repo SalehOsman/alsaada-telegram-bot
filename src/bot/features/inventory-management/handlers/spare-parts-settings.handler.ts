@@ -17,7 +17,7 @@ export const sparePartsSettingsHandler = new Composer<Context>()
 sparePartsSettingsHandler.callbackQuery('sp:categories:menu', async (ctx) => {
   await ctx.answerCallbackQuery()
 
-  const categories = await Database.prisma.iNV_EquipmentCategory.findMany({
+  const categories = await Database.prisma.equipmentCategory.findMany({
     orderBy: { orderIndex: 'asc' },
   })
 
@@ -118,7 +118,7 @@ sparePartsSettingsHandler.on('message:text', async (ctx, next) => {
       }
 
       // Check if code already exists
-      const existing = await Database.prisma.iNV_EquipmentCategory.findUnique({
+      const existing = await Database.prisma.equipmentCategory.findUnique({
         where: { code },
       })
 
@@ -159,13 +159,13 @@ sparePartsSettingsHandler.on('message:text', async (ctx, next) => {
       const data = state.data
 
       // Get the next order index
-      const lastCategory = await Database.prisma.iNV_EquipmentCategory.findFirst({
+      const lastCategory = await Database.prisma.iNV_Category.findFirst({
         orderBy: { orderIndex: 'desc' },
       })
       const nextOrderIndex = (lastCategory?.orderIndex || 0) + 1
 
       // Create category
-      await Database.prisma.iNV_EquipmentCategory.create({
+      await Database.prisma.iNV_Category.create({
         data: {
           code: data.code!,
           nameAr: data.nameAr!,
@@ -208,11 +208,12 @@ sparePartsSettingsHandler.on('message:text', async (ctx, next) => {
 sparePartsSettingsHandler.callbackQuery('sp:categories:list', async (ctx) => {
   await ctx.answerCallbackQuery()
 
-  const categories = await Database.prisma.iNV_EquipmentCategory.findMany({
+  const categories = await Database.prisma.iNV_Category.findMany({
+    where: { isActive: true },
     orderBy: { orderIndex: 'asc' },
     include: {
       _count: {
-        select: { spareParts: true },
+        select: { items: true },
       },
     },
   })
@@ -235,7 +236,7 @@ sparePartsSettingsHandler.callbackQuery('sp:categories:list', async (ctx) => {
   let message = '📋 **قائمة التصنيفات**\n\n'
   for (const cat of categories) {
     const status = cat.isActive ? '🟢' : '🔴'
-    const count = cat._count.spareParts
+    const count = cat._count.items
     message += `${status} ${cat.icon || '📦'} **${cat.nameAr}**\n`
     message += `   └ الكود: \`${cat.code}\` | القطع: ${count}\n\n`
   }
@@ -425,10 +426,11 @@ sparePartsSettingsHandler.callbackQuery('sp:locations:list', async (ctx) => {
   await ctx.answerCallbackQuery()
 
   const locations = await Database.prisma.iNV_StorageLocation.findMany({
+    where: { isActive: true },
     orderBy: { orderIndex: 'asc' },
     include: {
       _count: {
-        select: { spareParts: true },
+        select: { stockRecords: true },
       },
     },
   })
@@ -451,7 +453,7 @@ sparePartsSettingsHandler.callbackQuery('sp:locations:list', async (ctx) => {
   let message = '📋 **قائمة مواقع التخزين**\n\n'
   for (const loc of locations) {
     const status = loc.isActive ? '🟢' : '🔴'
-    const count = loc._count.spareParts
+    const count = loc._count.stockRecords
     message += `${status} 📍 **${loc.nameAr}**\n`
     message += `   └ الكود: \`${loc.code}\` | القطع: ${count}\n\n`
   }

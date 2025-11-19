@@ -6,13 +6,14 @@ export class ReturnService {
   static async getIssuances(page: number = 1, limit: number = 10) {
     const skip = (page - 1) * limit
     const [issuances, total] = await Promise.all([
-      Database.prisma.iNV_OilsGreasesIssuance.findMany({
-        include: { item: true, employee: true, equipment: true },
-        orderBy: { issuanceDate: 'desc' },
+      Database.prisma.iNV_Transaction.findMany({
+        where: { transactionType: 'ISSUANCE' },
+        include: { item: true, recipientEmployee: { select: { id: true, fullName: true, employeeCode: true } }, equipment: true },
+        orderBy: { transactionDate: 'desc' },
         skip,
         take: limit,
       }),
-      Database.prisma.iNV_OilsGreasesIssuance.count(),
+      Database.prisma.iNV_Transaction.count({ where: { transactionType: 'ISSUANCE' } }),
     ])
     return {
       issuances,
@@ -25,9 +26,9 @@ export class ReturnService {
   }
 
   static async getIssuanceById(id: number) {
-    return Database.prisma.iNV_OilsGreasesIssuance.findUnique({
-      where: { id },
-      include: { item: true, employee: true, equipment: true },
+    return Database.prisma.iNV_Transaction.findUnique({
+      where: { id, transactionType: 'ISSUANCE' },
+      include: { item: true, recipientEmployee: { select: { id: true, fullName: true, employeeCode: true } }, equipment: true },
     })
   }
 
@@ -38,8 +39,22 @@ export class ReturnService {
     notes?: string
     userId: number
   }) {
+    // Get item to fetch default locationId
+    const item = await Database.prisma.iNV_Item.findUnique({
+      where: { id: data.itemId },
+      select: { locationId: true }
+    })
+    
+    if (!item) {
+      throw new Error('❌ الصنف غير موجود')
+    }
+    
+    // Use item's default locationId or a fallback (location 1)
+    const locationId = item.locationId || 1
+    
     return OilsGreasesReturnService.createReturn({
       ...data,
+      locationId,
       reason: data.notes || 'إرجاع من عملية صرف',
     })
   }

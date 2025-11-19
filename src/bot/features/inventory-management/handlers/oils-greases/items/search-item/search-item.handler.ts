@@ -314,7 +314,7 @@ searchItemHandler.callbackQuery(/^og:items:search:view:(\d+)$/, async (ctx) => {
   const itemId = Number.parseInt(ctx.match![1], 10)
   
   const item = await SearchItemService.searchByCode('')
-  const fullItem = await Database.prisma.iNV_OilsGreasesItem.findUnique({
+  const fullItem = await Database.prisma.iNV_Item.findUnique({
     where: { id: itemId },
     include: { category: true, location: true },
   })

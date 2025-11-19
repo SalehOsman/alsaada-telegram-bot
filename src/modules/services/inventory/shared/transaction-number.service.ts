@@ -18,15 +18,15 @@ export class TransactionNumberService {
     const month = (date.getMonth() + 1).toString().padStart(2, '0')
     const yearMonth = `${year}${month}`
 
-    const lastTransaction = await Database.prisma.iNV_OilsGreasesPurchase.findFirst({
+    const lastTransaction = await Database.prisma.iNV_Transaction.findFirst({
       where: {
-        purchaseNumber: { startsWith: `${prefix}-${yearMonth}` }
+        transactionNumber: { startsWith: `${prefix}-${yearMonth}` }
       },
       orderBy: { createdAt: 'desc' }
     })
 
     const sequence = lastTransaction
-      ? this.extractSequence(lastTransaction.purchaseNumber) + 1
+      ? this.extractSequence(lastTransaction.transactionNumber) + 1
       : 1
 
     return `${prefix}-${yearMonth}-${sequence.toString().padStart(4, '0')}`
@@ -39,10 +39,10 @@ export class TransactionNumberService {
     warehouse: string,
     type: string
   ): Promise<string | null> {
-    const transaction = await Database.prisma.iNV_OilsGreasesPurchase.findFirst({
+    const transaction = await Database.prisma.iNV_Transaction.findFirst({
       orderBy: { createdAt: 'desc' }
     })
-    return transaction?.purchaseNumber || null
+    return transaction?.transactionNumber || null
   }
 
   /**

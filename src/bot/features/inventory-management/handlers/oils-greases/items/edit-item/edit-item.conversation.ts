@@ -12,7 +12,7 @@ export async function editItemConversation(conversation: any, ctx: Context) {
   const page = Number.parseInt(pageStr, 10)
   const categoryId = categoryIdStr ? Number.parseInt(categoryIdStr, 10) : undefined
 
-  const item = await Database.prisma.iNV_OilsGreasesItem.findUnique({
+  const item = await Database.prisma.iNV_Item.findUnique({
     where: { id: itemId },
     include: { category: true, location: true },
   })
@@ -40,7 +40,7 @@ export async function editItemConversation(conversation: any, ctx: Context) {
         return
       }
 
-      await Database.prisma.iNV_OilsGreasesItem.update({
+      await Database.prisma.iNV_Item.update({
         where: { id: itemId },
         data: { nameAr: nameCtx.message.text },
       })
@@ -63,7 +63,7 @@ export async function editItemConversation(conversation: any, ctx: Context) {
         return
       }
 
-      await Database.prisma.iNV_OilsGreasesItem.update({
+      await Database.prisma.iNV_Item.update({
         where: { id: itemId },
         data: { code: codeCtx.message.text },
       })
@@ -88,7 +88,7 @@ export async function editItemConversation(conversation: any, ctx: Context) {
       }
 
       const totalValue = quantity * Number(item.unitPrice)
-      await Database.prisma.iNV_OilsGreasesItem.update({
+      await Database.prisma.iNV_Item.update({
         where: { id: itemId },
         data: { quantity, totalValue },
       })
@@ -113,7 +113,7 @@ export async function editItemConversation(conversation: any, ctx: Context) {
       }
 
       const newTotalValue = item.quantity * price
-      await Database.prisma.iNV_OilsGreasesItem.update({
+      await Database.prisma.iNV_Item.update({
         where: { id: itemId },
         data: { unitPrice: price, totalValue: newTotalValue },
       })
@@ -136,7 +136,7 @@ export async function editItemConversation(conversation: any, ctx: Context) {
         return
       }
 
-      await Database.prisma.iNV_OilsGreasesItem.update({
+      await Database.prisma.iNV_Item.update({
         where: { id: itemId },
         data: { barcode: barcodeCtx.message.text },
       })
@@ -159,7 +159,7 @@ export async function editItemConversation(conversation: any, ctx: Context) {
         return
       }
 
-      await Database.prisma.iNV_OilsGreasesItem.update({
+      await Database.prisma.iNV_Item.update({
         where: { id: itemId },
         data: { supplierName: supplierCtx.message.text },
       })
@@ -182,7 +182,7 @@ export async function editItemConversation(conversation: any, ctx: Context) {
         return
       }
 
-      await Database.prisma.iNV_OilsGreasesItem.update({
+      await Database.prisma.iNV_Item.update({
         where: { id: itemId },
         data: { notes: notesCtx.message.text },
       })

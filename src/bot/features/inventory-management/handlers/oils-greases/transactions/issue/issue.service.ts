@@ -150,8 +150,22 @@ export class IssueService {
     notes?: string
     userId: number
   }) {
+    // Get item to fetch default locationId
+    const item = await Database.prisma.iNV_Item.findUnique({
+      where: { id: data.itemId },
+      select: { locationId: true }
+    })
+    
+    if (!item) {
+      throw new Error('❌ الصنف غير موجود')
+    }
+    
+    // Use item's default locationId or a fallback (location 1)
+    const locationId = item.locationId || 1
+    
     return await OilsGreasesIssueService.executeIssue({
       itemId: data.itemId,
+      locationId,
       quantity: data.quantity,
       recipientId: data.employeeId,
       notes: data.notes,

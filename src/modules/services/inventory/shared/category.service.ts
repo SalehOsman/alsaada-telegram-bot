@@ -5,7 +5,7 @@ export class CategoryService {
    * Get all categories for a warehouse
    */
   static async getCategories(warehouse: 'oils-greases' | 'spare-parts') {
-    return await Database.prisma.iNV_OilsGreasesCategory.findMany({
+    return await Database.prisma.iNV_Category.findMany({
       orderBy: { nameAr: 'asc' }
     })
   }
@@ -14,15 +14,9 @@ export class CategoryService {
    * Get category by ID
    */
   static async getCategoryById(warehouse: 'oils-greases' | 'spare-parts', id: number) {
-    if (warehouse === 'oils-greases') {
-      return await Database.prisma.iNV_OilsGreasesCategory.findUnique({
-        where: { id }
-      })
-    } else {
-      return await Database.prisma.iNV_EquipmentCategory.findUnique({
-        where: { id }
-      })
-    }
+    return await Database.prisma.iNV_Category.findUnique({
+      where: { id }
+    })
   }
 
   /**
@@ -32,17 +26,10 @@ export class CategoryService {
     warehouse: 'oils-greases' | 'spare-parts',
     categoryId: number
   ) {
-    if (warehouse === 'oils-greases') {
-      return await Database.prisma.iNV_OilsGreasesItem.findMany({
-        where: { categoryId },
-        include: { location: true }
-      })
-    } else {
-      return await Database.prisma.iNV_SparePart.findMany({
-        where: { categoryId },
-        include: { location: true }
-      })
-    }
+    return await Database.prisma.iNV_Item.findMany({
+      where: { categoryId },
+      include: { stocks: { include: { location: true } } }
+    })
   }
 
   /**
@@ -60,28 +47,18 @@ export class CategoryService {
     },
     userId: bigint
   ) {
-    if (warehouse === 'oils-greases') {
-      return await Database.prisma.iNV_OilsGreasesCategory.create({
-        data: {
-          ...data,
-          displayOrder: data.displayOrder || 0,
-          isActive: true,
-          createdBy: userId,
-        },
-      })
-    } else {
-      return await Database.prisma.iNV_EquipmentCategory.create({
-        data: {
-          code: data.code,
-          nameAr: data.nameAr,
-          nameEn: data.nameEn || null,
-          description: data.description || null,
-          orderIndex: data.displayOrder || 0,
-          isActive: true,
-          createdBy: userId,
-        },
-      })
-    }
+    return await Database.prisma.iNV_Category.create({
+      data: {
+        code: data.code,
+        nameAr: data.nameAr,
+        nameEn: data.nameEn || null,
+        prefix: data.prefix,
+        description: data.description || null,
+        orderIndex: data.displayOrder || 0,
+        isActive: true,
+        createdBy: userId,
+      },
+    })
   }
 
   /**
@@ -98,26 +75,16 @@ export class CategoryService {
     },
     userId: bigint
   ) {
-    if (warehouse === 'oils-greases') {
-      return await Database.prisma.iNV_OilsGreasesCategory.update({
-        where: { id },
-        data: {
-          ...data,
-          updatedBy: userId,
-        },
-      })
-    } else {
-      return await Database.prisma.iNV_EquipmentCategory.update({
-        where: { id },
-        data: {
-          nameAr: data.nameAr,
-          nameEn: data.nameEn,
-          description: data.description,
-          orderIndex: data.displayOrder,
-          updatedBy: userId,
-        },
-      })
-    }
+    return await Database.prisma.iNV_Category.update({
+      where: { id },
+      data: {
+        nameAr: data.nameAr,
+        nameEn: data.nameEn,
+        description: data.description,
+        orderIndex: data.displayOrder,
+        updatedBy: userId,
+      },
+    })
   }
 
   /**
@@ -127,16 +94,9 @@ export class CategoryService {
     warehouse: 'oils-greases' | 'spare-parts',
     id: number
   ) {
-    if (warehouse === 'oils-greases') {
-      return await Database.prisma.iNV_OilsGreasesCategory.update({
-        where: { id },
-        data: { isActive: false },
-      })
-    } else {
-      return await Database.prisma.iNV_EquipmentCategory.update({
-        where: { id },
-        data: { isActive: false },
-      })
-    }
+    return await Database.prisma.iNV_Category.update({
+      where: { id },
+      data: { isActive: false },
+    })
   }
 }

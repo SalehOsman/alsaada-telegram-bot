@@ -3,6 +3,7 @@ import { TransactionNumberService } from '../shared/index.js'
 
 export interface PurchaseData {
   itemId: number
+  locationId: number
   quantity: number
   price: number
   invoiceNumber?: string
@@ -13,6 +14,7 @@ export interface PurchaseData {
 export class OilsGreasesPurchaseService {
   /**
    * Execute purchase transaction
+   * Note: In unified schema, we update INV_Stock and create INV_Transaction
    */
   static async executePurchase(data: PurchaseData) {
     // Validation
@@ -24,11 +26,26 @@ export class OilsGreasesPurchaseService {
     }
 
     return await Database.prisma.$transaction(async tx => {
-      // Update item quantity
-      const item = await tx.iNV_OilsGreasesItem.update({
-        where: { id: data.itemId },
-        data: { quantity: { increment: data.quantity } }
+      // Find or create stock record
+      let stock = await tx.iNV_Stock.findFirst({
+        where: { itemId: data.itemId, locationId: data.locationId }
       })
+
+      if (stock) {
+        stock = await tx.iNV_Stock.update({
+          where: { id: stock.id },
+          data: { quantity: { increment: data.quantity } }
+        })
+      } else {
+        stock = await tx.iNV_Stock.create({
+          data: {
+            itemId: data.itemId,
+            locationId: data.locationId,
+            quantity: data.quantity,
+            createdBy: BigInt(data.userId)
+          }
+        })
+      }
 
       // Generate transaction number
       const transactionNumber = await TransactionNumberService.generate(
@@ -36,21 +53,23 @@ export class OilsGreasesPurchaseService {
         'purchase'
       )
 
-      // Create transaction record
-      const transaction = await tx.iNV_OilsGreasesPurchase.create({
+      // Create unified transaction record
+      const transaction = await tx.iNV_Transaction.create({
         data: {
-          purchaseNumber: transactionNumber,
+          transactionNumber,
+          transactionType: 'PURCHASE',
           itemId: data.itemId,
+          locationId: data.locationId,
           quantity: data.quantity,
           unitPrice: data.price,
-          totalCost: data.quantity * data.price,
-          invoiceNumber: data.invoiceNumber,
+          totalPrice: data.quantity * data.price,
+          referenceNumber: data.invoiceNumber,
           notes: data.notes,
           createdBy: BigInt(data.userId)
         }
       })
 
-      return { transaction, item }
+      return { transaction, stock }
     })
   }
 }

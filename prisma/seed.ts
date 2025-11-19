@@ -297,6 +297,44 @@ async function seedFeatureConfigs() {
   console.log(`   - الوظائف الفرعية: ${subFeaturesCount}`);
 }
 
+async function seedInventory() {
+  console.log('\n📦 بدء إضافة بيانات المخازن الموحدة...');
+  
+  // الفئات الموحدة
+  const categories = [
+    { code: 'SPARE_PART', nameAr: 'قطع غيار', nameEn: 'Spare Parts', icon: '⚙️', prefix: 'SP', orderIndex: 1 },
+    { code: 'OILS_GREASE', nameAr: 'زيوت وشحوم', nameEn: 'Oils & Greases', icon: '🛢️', prefix: 'OG', orderIndex: 2 },
+    { code: 'FUEL', nameAr: 'سولار', nameEn: 'Fuel', icon: '⛽', prefix: 'FL', orderIndex: 3 },
+    { code: 'TOOLS', nameAr: 'عدد وأدوات', nameEn: 'Tools', icon: '🛠️', prefix: 'TL', orderIndex: 4 },
+  ];
+  
+  for (const cat of categories) {
+    await prisma.iNV_Category.upsert({
+      where: { code: cat.code },
+      update: cat,
+      create: { ...cat, isActive: true, createdBy: BigInt(0) },
+    });
+    console.log(`   ✅ ${cat.nameAr}`);
+  }
+  
+  // مواقع التخزين
+  const locations = [
+    { code: 'CONT-1', nameAr: 'كرستر رقم 1', nameEn: 'Container 1', locationType: 'CONTAINER', orderIndex: 1 },
+    { code: 'SHELF-A1', nameAr: 'رف A1', nameEn: 'Shelf A1', locationType: 'SHELF', orderIndex: 2 },
+  ];
+  
+  for (const loc of locations) {
+    await prisma.iNV_StorageLocation.upsert({
+      where: { code: loc.code },
+      update: loc,
+      create: { ...loc, isActive: true, createdBy: BigInt(0) },
+    });
+    console.log(`   ✅ ${loc.nameAr}`);
+  }
+  
+  console.log(`\n✨ تم إضافة ${categories.length} فئة و ${locations.length} موقع تخزين!`);
+}
+
 async function main() {
   console.log('🚀 بدء عملية Seeding...\n');
   
@@ -306,6 +344,7 @@ async function main() {
   await seedPositions();
   await seedEquipment();
   await seedFeatureConfigs(); // إضافة تكوين الوظائف والأقسام
+  await seedInventory(); // إضافة بيانات المخازن الموحدة
   // await seedEmployeesWithLeaves();
   await seedRealisticLeaves();
   
@@ -322,6 +361,8 @@ async function main() {
     equipmentTypes: await prisma.equipmentType.count(),
     departmentConfigs: await prisma.departmentConfig.count(),
     subFeatureConfigs: await prisma.subFeatureConfig.count(),
+    invCategories: await prisma.iNV_Category.count(),
+    invLocations: await prisma.iNV_StorageLocation.count(),
     employees: await prisma.employee.count(),
     leaves: await prisma.hR_EmployeeLeave.count(),
   };
@@ -333,6 +374,8 @@ async function main() {
   console.log(`✅ أنواع المعدات: ${counts.equipmentTypes}`);
   console.log(`✅ تكوين الأقسام: ${counts.departmentConfigs}`);
   console.log(`✅ تكوين الوظائف الفرعية: ${counts.subFeatureConfigs}`);
+  console.log(`✅ فئات المخازن: ${counts.invCategories}`);
+  console.log(`✅ مواقع التخزين: ${counts.invLocations}`);
   console.log(`✅ العاملين: ${counts.employees}`);
   console.log(`✅ الإجازات: ${counts.leaves}`);
   console.log('='.repeat(50));

@@ -42,16 +42,16 @@ returnHandler.callbackQuery(/^og:return:select:(\d+)$/, async (ctx) => {
     step: 'awaiting_quantity',
     data: {
       issuanceId: issuance.id,
-      issuanceNumber: issuance.issuanceNumber,
+      issuanceNumber: issuance.transactionNumber,
       itemId: issuance.itemId,
       itemName: issuance.item.nameAr,
       itemCode: issuance.item.code,
       issuedQuantity: issuance.quantity,
       currentQuantity: issuance.item.quantity,
       unit: issuance.item.unit,
-      employeeId: issuance.issuedToEmployeeId,
-      employeeName: issuance.issuedToEmployeeName,
-      employeeCode: issuance.employee?.employeeCode,
+      employeeId: issuance.recipientEmployeeId,
+      employeeName: issuance.recipientEmployee?.fullName || 'غير محدد',
+      employeeCode: issuance.recipientEmployee?.employeeCode,
       equipmentName: issuance.equipment?.nameAr,
     },
   }
@@ -59,9 +59,9 @@ returnHandler.callbackQuery(/^og:return:select:(\d+)$/, async (ctx) => {
   await ctx.editMessageText(
     `📦 **الصنف:** ${issuance.item.nameAr}\n`
     + `📊 **الكمية المصروفة:** ${issuance.quantity} ${issuance.item.unit}\n`
-    + `👤 **المستلم:** ${issuance.issuedToEmployeeName}\n`
+    + `👤 **المستلم:** ${issuance.recipientEmployee?.fullName || 'غير محدد'}\n`
     + (issuance.equipment ? `🚜 **المعدة:** ${issuance.equipment.nameAr}\n` : '')
-    + `📅 **التاريخ:** ${issuance.issuanceDate.toLocaleDateString('ar-EG')}\n\n`
+    + `📅 **التاريخ:** ${issuance.transactionDate.toLocaleDateString('ar-EG')}\n\n`
     + '🔢 **أدخل الكمية المراد إرجاعها:**',
     {
       reply_markup: new InlineKeyboard().text('❌ إلغاء', 'og:trans:menu'),
@@ -190,7 +190,7 @@ async function showIssuancesList(ctx: Context, page: number) {
   const keyboard = new InlineKeyboard()
   
   for (const iss of result.issuances) {
-    const label = `${iss.item.nameAr} - ${iss.quantity} ${iss.item.unit} - ${iss.issuedToEmployeeName}`
+    const label = `${iss.item.nameAr} - ${iss.quantity} ${iss.item.unit} - ${iss.recipientEmployee?.fullName || 'غير محدد'}`
     keyboard.text(label.substring(0, 60), `og:return:select:${iss.id}`)
     keyboard.row()
   }

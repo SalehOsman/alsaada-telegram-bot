@@ -146,6 +146,16 @@ export interface SessionData {
     categoryId?: number
     partId?: number
     data?: any
+    messageIds?: number[] // For tracking intermediate messages to delete
+    // Navigation & Edit features (v3.0+)
+    navigationHistory?: Array<{
+      step: string
+      timestamp: number
+      data?: Record<string, any>
+    }>
+    editMode?: boolean // True when editing a field from review
+    editingField?: string // Field being edited
+    returnToStep?: string // Step to return to after edit
   }
   // Inventory - Image upload
   uploadingImageFor?: {

@@ -1,24 +1,65 @@
 /**
  * Add Item Conversation - Multi-step flow
+ * ✅ Refactored to use Utils (v2.0)
  */
 
 import type { Context } from '../../../../../../context.js'
-import { InlineKeyboard } from 'grammy'
 import { Database } from '#root/modules/database/index.js'
 import { AddItemService } from './add-item.service.js'
 import type { AddItemData } from './add-item.types.js'
 
+// ✅ استخدام Utils - من المستوى العام للبوت
+import { 
+  validateText, 
+  validateQuantity, 
+  validatePrice,
+  validateNumber,
+} from '#root/bot/utils/validation/input-validator.util.js'
+import { 
+  buildActionButtons, 
+  buildCategoriesKeyboard,
+  addBackButton,
+  buildConfirmKeyboard,
+} from '#root/bot/utils/ui/keyboard-builder.util.js'
+import { formatArabicCurrency } from '#root/bot/utils/formatting/arabic-formatter.util.js'
+import { DetailFormatter } from '#root/bot/utils/formatting/detail-formatter.util.js'
+import { UnitSelector } from '#root/bot/utils/ui/unit-selector.util.js'
+import { extractCategoryId } from '#root/bot/utils/ui/category-selector.util.js'
+import { MessageTracker } from '#root/bot/utils/ui/message-tracker.util.js'
+import { ConversationStep } from '#root/bot/utils/ui/conversation-step.util.js'
+import { EditModeHandler } from '#root/bot/utils/conversation/edit-mode-handler.util.js'
+import { BarcodeGenerator } from '#root/bot/utils/data/barcode-generator.util.js'
+import { DuplicateChecker } from '#root/bot/utils/data/duplicate-checker.util.js'
+import { ProgressIndicator } from '#root/bot/utils/ui/progress-indicator.util.js'
+import { NavigationManager } from '#root/bot/utils/core/navigation-manager.util.js'
+import { SmartSuggestions } from '#root/bot/utils/data/smart-suggestions.util.js'
+import { EditManager } from '#root/bot/utils/core/edit-manager.util.js'
+
+// ✅ Utils خاصة بالمخازن - من مستوى الـ feature
+import { 
+  updateSessionStep, 
+  updateSessionData,
+  clearInventorySession,
+  isStep,
+} from '#root/bot/utils/core/session-manager.util.js'
+import { 
+  buildSuccessMessage, 
+  buildErrorMessage,
+} from '../../../../utils/message-builder.util.js'
+
 export class AddItemConversation {
+  // ⚡ استبدال trackMessage و deleteAllMessages بـ MessageTracker util
+
   /**
    * Start: Choose input method
+   * ✅ Using buildActionButtons
    */
   static async start(ctx: Context) {
-    const keyboard = new InlineKeyboard()
-      .text('📸 مسح الباركود', 'og:items:add:scan')
-      .row()
-      .text('✍️ إدخال يدوي', 'og:items:add:manual')
-      .row()
-      .text('❌ إلغاء', 'og:items:menu')
+    const keyboard = buildActionButtons([
+      { text: '📸 مسح الباركود', callback: 'og:items:add:scan' },
+      { text: '✍️ إدخال يدوي', callback: 'og:items:add:manual' },
+    ])
+    addBackButton(keyboard, 'og:items:menu', '❌ إلغاء')
 
     await ctx.editMessageText(
       '➕ **إضافة صنف جديد**\n\n'
@@ -36,6 +77,7 @@ export class AddItemConversation {
 
   /**
    * Scan barcode
+   * ✅ No change needed (simple initialization)
    */
   static async scanBarcode(ctx: Context) {
     ctx.session.inventoryForm = {
@@ -43,9 +85,12 @@ export class AddItemConversation {
       step: 'awaiting_barcode_image',
       warehouse: 'oils-greases',
       data: {},
+      messageIds: ctx.callbackQuery?.message?.message_id ? [ctx.callbackQuery.message.message_id] : [],
     }
 
-    const keyboard = new InlineKeyboard().text('❌ إلغاء', 'og:items:add:start')
+    const keyboard = buildActionButtons([
+      { text: '❌ إلغاء', callback: 'og:items:add:start' },
+    ])
 
     await ctx.editMessageText(
       '📸 **مسح الباركود**\n\n'
@@ -60,16 +105,28 @@ export class AddItemConversation {
 
   /**
    * Manual input - generate barcode
+   * ⚡ Using BarcodeGenerator (اختصار 3 أسطر + standardization)
    */
   static async manualInput(ctx: Context) {
-    const barcode = `628${Date.now().toString().slice(-10)}`
+    // ⚡ استخدام BarcodeGenerator بدلاً من توليد يدوي
+    const barcode = BarcodeGenerator.generate('oils-greases')
 
-    const keyboard = new InlineKeyboard()
-      .text('✅ استخدام هذا الباركود', `og:items:add:confirm-barcode:${barcode}`)
-      .row()
-      .text('🔄 توليد آخر', 'og:items:add:manual')
-      .row()
-      .text('❌ إلغاء', 'og:items:add:start')
+    // Initialize session with message tracking
+    if (!ctx.session.inventoryForm || !ctx.session.inventoryForm.messageIds) {
+      ctx.session.inventoryForm = {
+        action: 'add',
+        step: 'awaiting_barcode_confirmation',
+        warehouse: 'oils-greases',
+        data: {},
+        messageIds: ctx.callbackQuery?.message?.message_id ? [ctx.callbackQuery.message.message_id] : [],
+      }
+    }
+
+    const keyboard = buildActionButtons([
+      { text: '✅ استخدام هذا الباركود', callback: `og:items:add:confirm-barcode:${barcode}` },
+      { text: '🔄 توليد آخر', callback: 'og:items:add:manual' },
+      { text: '❌ إلغاء', callback: 'og:items:add:start' },
+    ])
 
     await ctx.editMessageText(
       '🔢 **توليد باركود تلقائي**\n\n'
@@ -84,82 +141,67 @@ export class AddItemConversation {
 
   /**
    * Confirm barcode and ask for name
+   * ⚡ Using DuplicateChecker (اختصار 20 سطر)
    */
   static async confirmBarcode(ctx: Context, barcode: string) {
-    // Check duplicate
-    const existing = await AddItemService.checkBarcodeExists(barcode)
+    // ⚡ استخدام DuplicateChecker بدلاً من الكود اليدوي
+    const result = await DuplicateChecker.checkBarcode(ctx, {
+      barcode,
+      retryCallback: 'og:items:add:manual',
+      cancelCallback: 'og:items:add:start',
+    })
 
-    if (existing) {
-      await ctx.editMessageText(
-        '⚠️ **يوجد صنف بهذا الباركود**\n\n'
-        + `📝 **الاسم:** ${existing.nameAr}\n`
-        + `🔢 **الكود:** \`${existing.code}\`\n`
-        + `📦 **الكمية:** ${existing.quantity} ${existing.unit}`,
-        {
-          reply_markup: new InlineKeyboard()
-            .text('🔄 توليد باركود آخر', 'og:items:add:manual')
-            .row()
-            .text('❌ إلغاء', 'og:items:add:start'),
-          parse_mode: 'Markdown',
-        },
-      )
-      return
-    }
+    if (result.isDuplicate) return // Warning shown automatically
 
-    ctx.session.inventoryForm = {
-      action: 'add',
-      step: 'awaiting_name_ar',
-      warehouse: 'oils-greases',
+    // ⚡ استخدام ConversationStep.prompt مع ProgressIndicator و NavigationManager
+    await ConversationStep.prompt(ctx, {
+      nextStep: 'awaiting_name_ar',
       data: { barcode },
-    }
-
-    await ctx.editMessageText(
-      '✅ **الباركود:** \`' + barcode + '\`\n\n'
-      + '📝 **أدخل اسم الصنف بالعربية:**\n\n'
-      + '**مثال:** زيت محرك 10W-40\n\n'
-      + '⏳ **في انتظار الإدخال...**',
-      {
-        reply_markup: new InlineKeyboard().text('❌ إلغاء', 'og:items:add:start'),
-        parse_mode: 'Markdown',
-      },
-    )
+      message: '✅ **الباركود:** \`' + barcode + '\`\n\n'
+        + '📝 **أدخل اسم الصنف بالعربية:**\n\n'
+        + '**مثال:** زيت محرك 10W-40',
+      cancelCallback: 'og:items:add:start',
+      showProgress: true,
+      addBackButton: true,
+    })
   }
 
   /**
    * Handle Arabic name input
+   * ⚡ Using ConversationStep.prompt (اختصار 12 أسطر)
+   * ✏️ Supports edit mode
    */
   static async handleNameInput(ctx: Context, text: string) {
-    const state = ctx.session.inventoryForm
-    if (!state || state.step !== 'awaiting_name_ar')
-      return false
+    if (!isStep(ctx, 'awaiting_name_ar')) return false
 
-    if (!text || text.length < 2) {
-      await ctx.reply('❌ الرجاء إدخال اسم صحيح (حرفين على الأقل)')
+    // ✅ استخدام validator بدلاً من التحقق اليدوي
+    const validation = validateText(text, { minLength: 2 })
+    if (!validation.valid) {
+      await ctx.reply(validation.error!)
       return true
     }
 
-    ctx.session.inventoryForm = {
-      ...state,
-      step: 'awaiting_name_en',
-      warehouse: 'oils-greases',
-      data: { ...state.data, nameAr: text },
+    // Update data
+    updateSessionStep(ctx, 'awaiting_name_en', { nameAr: validation.value })
+    
+    // ✏️ Handle edit mode using utility
+    if (await EditModeHandler.handleIfEditMode(ctx, 'الاسم بالعربية', AddItemConversation.showFinalReview)) {
+      return true
     }
 
-    const keyboard = new InlineKeyboard()
-      .text('⏭️ تخطي', 'og:items:add:skip_name_en')
-      .row()
-      .text('❌ إلغاء', 'og:items:menu')
-
-    await ctx.reply(
-      '✅ تم حفظ الاسم بالعربية\n\n'
-      + '🔤 **أدخل الاسم بالإنجليزية (اختياري):**\n\n'
-      + '**مثال:** Engine Oil 10W-40',
-      {
-        reply_markup: keyboard,
-        parse_mode: 'Markdown',
-      },
-    )
-
+    // ⚡ استخدام ConversationStep.prompt بدلاً من الكود اليدوي
+    await ConversationStep.prompt(ctx, {
+      nextStep: 'awaiting_name_en',
+      data: { nameAr: validation.value },
+      message: buildSuccessMessage('حفظ الاسم بالعربية')
+        + '\n\n🔤 **أدخل الاسم بالإنجليزية (اختياري):**\n\n'
+        + '**مثال:** Engine Oil 10W-40',
+      skipCallback: 'og:items:add:skip_name_en',
+      cancelCallback: 'og:items:menu',
+      showProgress: true,
+      addBackButton: true,
+    })
+    
     return true
   }
 
@@ -167,11 +209,9 @@ export class AddItemConversation {
    * Handle English name input
    */
   static async handleNameEnInput(ctx: Context, text: string) {
-    const state = ctx.session.inventoryForm
-    if (!state || state.step !== 'awaiting_name_en')
-      return false
+    if (!isStep(ctx, 'awaiting_name_en')) return false
 
-    await this.showCategorySelection(ctx, text)
+    await AddItemConversation.showCategorySelection(ctx, text)
     return true
   }
 
@@ -179,60 +219,78 @@ export class AddItemConversation {
    * Skip English name
    */
   static async skipNameEn(ctx: Context) {
-    await this.showCategorySelection(ctx)
+    await AddItemConversation.showCategorySelection(ctx)
   }
 
   /**
    * Show category selection
+   * ✅ Using buildCategoriesKeyboard and updateSessionStep
    */
   static async showCategorySelection(ctx: Context, nameEn?: string) {
     const state = ctx.session.inventoryForm
-    if (!state)
-      return
+    if (!state) return
 
-    const categories = await Database.prisma.iNV_OilsGreasesCategory.findMany({
-      where: { isActive: true },
+    const categories = await Database.prisma.iNV_Category.findMany({
+      where: { 
+        isActive: true,
+        warehouseType: 'oils-greases',
+      },
       orderBy: { displayOrder: 'asc' },
     })
 
     if (categories.length === 0) {
-      await ctx.reply('❌ لا توجد فئات متاحة')
-      ctx.session.inventoryForm = undefined
+      await ctx.reply(buildErrorMessage('عرض الفئات', 'لا توجد فئات متاحة'))
+      clearInventorySession(ctx)
       return
     }
 
-    ctx.session.inventoryForm = {
-      ...state,
-      step: 'awaiting_category',
-      warehouse: 'oils-greases',
-      data: { ...state.data, nameEn },
+    // ✅ استخدام updateSessionStep
+    updateSessionStep(ctx, 'awaiting_category', { nameEn })
+
+    // ✅ استخدام buildCategoriesKeyboard
+    const keyboard = buildCategoriesKeyboard(categories, 'og:items:add:select_category', { itemsPerRow: 1 })
+    addBackButton(keyboard, 'og:items:menu', '❌ إلغاء')
+
+    // ⚡ إضافة SmartSuggestions
+    const itemName = state.data.nameAr || state.data.nameEn
+    let message = nameEn
+      ? buildSuccessMessage('حفظ الاسم بالإنجليزية')
+        + '\n\n🛢️ **اختر نوع الزيت/الشحم:**\n\n💡 *سيتم توليد الكود تلقائياً*'
+      : '⏭️ **تم تخطي الاسم الإنجليزي**\n\n🛢️ **اختر نوع الزيت/الشحم:**\n\n💡 *سيتم توليد الكود تلقائياً*'
+    
+    // ⚡ إضافة اقتراحات ذكية للفئة
+    if (itemName) {
+      try {
+        const suggestions = await SmartSuggestions.suggestCategory(itemName, 'oils-greases')
+        console.log('🔍 Smart Suggestions:', { itemName, count: suggestions.length, suggestions })
+        if (suggestions.length > 0 && suggestions[0].confidence > 0.6) {
+          const topSuggestion = suggestions[0]
+          message += `\n\n💡 **اقتراح:** ${topSuggestion.value.nameAr}`
+          message += `\n📊 **الثقة:** ${Math.round(topSuggestion.confidence * 100)}%`
+          message += `\n✅ ${topSuggestion.reason}`
+        }
+      } catch (error) {
+        console.error('❌ SmartSuggestions error:', error)
+      }
     }
 
-    const keyboard = new InlineKeyboard()
-    for (const cat of categories) {
-      keyboard.text(cat.nameAr, `og:items:add:select_category:${cat.id}`).row()
-    }
-    keyboard.text('❌ إلغاء', 'og:items:menu')
-
-    const message = nameEn
-      ? `✅ تم حفظ الاسم بالإنجليزية\n\n🛢️ **اختر نوع الزيت/الشحم:**\n\n💡 *سيتم توليد الكود تلقائياً*`
-      : `⏭️ تم تخطي الاسم الإنجليزي\n\n🛢️ **اختر نوع الزيت/الشحم:**\n\n💡 *سيتم توليد الكود تلقائياً*`
-
-    await ctx.reply(message, {
+    const sentMessage = await ctx.reply(message, {
       reply_markup: keyboard,
       parse_mode: 'Markdown',
     })
+    
+    MessageTracker.track(ctx, sentMessage.message_id)
   }
 
   /**
    * Handle category selection
+   * ✅ Using updateSessionStep and buildCategoriesKeyboard for locations
+   * ✏️ Supports edit mode
    */
   static async selectCategory(ctx: Context, categoryId: number) {
-    const state = ctx.session.inventoryForm
-    if (!state || state.step !== 'awaiting_category')
-      return
+    if (!isStep(ctx, 'awaiting_category')) return
 
-    const category = await Database.prisma.iNV_OilsGreasesCategory.findUnique({
+    const category = await Database.prisma.iNV_Category.findUnique({
       where: { id: categoryId },
     })
 
@@ -243,15 +301,12 @@ export class AddItemConversation {
 
     const code = await AddItemService.generateCode(categoryId)
 
-    ctx.session.inventoryForm = {
-      ...state,
-      step: 'awaiting_location',
-      warehouse: 'oils-greases',
-      data: {
-        ...state.data,
-        categoryId,
-        code,
-      },
+    // ✅ استخدام updateSessionStep
+    updateSessionStep(ctx, 'awaiting_location', { categoryId, code, categoryName: category.nameAr })
+    
+    // ✏️ Handle edit mode using utility
+    if (await EditModeHandler.completeEdit(ctx, 'الفئة', AddItemConversation.showFinalReview)) {
+      return
     }
 
     const locations = await Database.prisma.iNV_StorageLocation.findMany({
@@ -260,19 +315,27 @@ export class AddItemConversation {
     })
 
     if (locations.length === 0) {
-      await ctx.reply('❌ لا توجد مواقع تخزين')
-      ctx.session.inventoryForm = undefined
+      await ctx.reply(buildErrorMessage('عرض المواقع', 'لا توجد مواقع تخزين'))
+      clearInventorySession(ctx)
       return
     }
 
-    const keyboard = new InlineKeyboard()
-    for (const loc of locations) {
-      keyboard.text(`📍 ${loc.nameAr}`, `og:items:add:select_location:${loc.id}`).row()
-    }
-    keyboard.text('❌ إلغاء', 'og:items:menu')
+    // ✅ استخدام keyboard builder مُبسط
+    const keyboard = buildActionButtons(
+      locations.map(loc => ({
+        text: `📍 ${loc.nameAr}`,
+        callback: `og:items:add:select_location:${loc.id}`
+      })),
+      1 // one per row
+    )
+    addBackButton(keyboard, 'og:items:menu', '❌ إلغاء')
 
+    // ⚡ إضافة مؤشر التقدم
+    const progress = ProgressIndicator.addItemFlow('awaiting_location')
+    
     await ctx.editMessageText(
-      `✅ **النوع:** ${category.nameAr}\n`
+      progress + '\n\n'
+      + `✅ **النوع:** ${category.nameAr}\n`
       + `🔢 **الكود:** \`${code}\`\n\n`
       + '📍 **اختر موقع التخزين:**',
       {
@@ -284,32 +347,35 @@ export class AddItemConversation {
 
   /**
    * Handle location selection
+   * ⚡ Using updateSessionStep and UnitSelector.buildUnitKeyboard (اختصار 7 أسطر)
+   * ✏️ Supports edit mode
    */
   static async selectLocation(ctx: Context, locationId: number) {
-    const state = ctx.session.inventoryForm
-    if (!state || state.step !== 'awaiting_location')
-      return
+    if (!isStep(ctx, 'awaiting_location')) return
 
-    ctx.session.inventoryForm = {
-      ...state,
-      step: 'awaiting_unit',
-      warehouse: 'oils-greases',
-      data: { ...state.data, locationId },
+    // Get location name for storage
+    const location = await Database.prisma.iNV_StorageLocation.findUnique({
+      where: { id: locationId },
+    })
+
+    // ✅ استخدام updateSessionStep
+    updateSessionStep(ctx, 'awaiting_unit', { locationId, locationName: location?.nameAr })
+    
+    // ✏️ Handle edit mode using utility
+    if (await EditModeHandler.completeEdit(ctx, 'الموقع', AddItemConversation.showFinalReview)) {
+      return
     }
 
-    const keyboard = new InlineKeyboard()
-      .text('🛢️ لتر', 'og:items:add:select_unit:لتر')
-      .text('🪣 جالون', 'og:items:add:select_unit:جالون')
-      .row()
-      .text('🛢️ برميل', 'og:items:add:select_unit:برميل')
-      .text('📦 كرتونة', 'og:items:add:select_unit:كرتونة')
-      .row()
-      .text('🧴 عبوة', 'og:items:add:select_unit:عبوة')
-      .row()
-      .text('❌ إلغاء', 'og:items:menu')
+    // ⚡ استخدام UnitSelector بدلاً من buildActionButtons يدوياً
+    const keyboard = UnitSelector.buildUnitKeyboard('og:items:add:select_unit', 'volume', 2)
+    addBackButton(keyboard, 'og:items:menu', '❌ إلغاء')
+
+    // ⚡ إضافة مؤشر التقدم
+    const progress = ProgressIndicator.addItemFlow('awaiting_unit')
 
     await ctx.editMessageText(
-      '📦 **اختر نوع الوحدة:**\n\n'
+      progress + '\n\n'
+      + '📦 **اختر نوع الوحدة:**\n\n'
       + '🛢️ **لتر** - للكميات الصغيرة\n'
       + '🪣 **جالون** - 4 لتر\n'
       + '🛢️ **برميل** - 200 لتر\n'
@@ -324,29 +390,38 @@ export class AddItemConversation {
 
   /**
    * Handle unit selection
+   * ✅ Using updateSessionStep
    */
   static async selectUnit(ctx: Context, unit: string) {
+    if (!isStep(ctx, 'awaiting_unit')) return
+
     const state = ctx.session.inventoryForm
-    if (!state || state.step !== 'awaiting_unit')
-      return
+    if (!state) return
+
+    // ✏️ Handle edit mode using utility (update data first)
+    if (state.editMode) {
+      state.data.unit = unit
+      if (await EditModeHandler.completeEdit(ctx, 'الوحدة', AddItemConversation.showFinalReview)) {
+        return
+      }
+    }
 
     // If unit is جالون or برميل, ask for capacity
     if (unit === 'جالون' || unit === 'برميل') {
-      ctx.session.inventoryForm = {
-        ...state,
-        step: 'awaiting_unit_capacity',
-        warehouse: 'oils-greases',
-        data: { ...state.data, unit },
-      }
+      updateSessionStep(ctx, 'awaiting_unit_capacity', { unit })
 
       const defaultCapacity = unit === 'جالون' ? 20 : 200
-      const keyboard = new InlineKeyboard()
-        .text(`✅ استخدام ${defaultCapacity} لتر`, `og:items:add:confirm_capacity:${defaultCapacity}`)
-        .row()
-        .text('❌ إلغاء', 'og:items:menu')
+      const keyboard = buildActionButtons([
+        { text: `✅ استخدام ${defaultCapacity} لتر`, callback: `og:items:add:confirm_capacity:${defaultCapacity}` },
+        { text: '❌ إلغاء', callback: 'og:items:menu' },
+      ])
+
+      // ⚡ إضافة مؤشر التقدم
+      const progress = ProgressIndicator.addItemFlow('awaiting_capacity')
 
       await ctx.editMessageText(
-        `✅ **الوحدة:** ${unit}\n\n`
+        progress + '\n\n'
+        + `✅ **الوحدة:** ${unit}\n\n`
         + '📦 **أدخل سعة الوحدة (باللتر):**\n\n'
         + `**مثال:** ${defaultCapacity}\n\n`
         + `💡 *الافتراضي: ${defaultCapacity} لتر*`,
@@ -358,20 +433,23 @@ export class AddItemConversation {
     }
     else {
       // For other units, go directly to quantity
-      ctx.session.inventoryForm = {
-        ...state,
-        step: 'awaiting_quantity',
-        warehouse: 'oils-greases',
-        data: { ...state.data, unit, unitCapacity: null },
-      }
+      updateSessionStep(ctx, 'awaiting_quantity', { unit, unitCapacity: null })
+
+      const keyboard = buildActionButtons([
+        { text: '❌ إلغاء', callback: 'og:items:menu' },
+      ])
+
+      // ⚡ إضافة مؤشر التقدم
+      const progress = ProgressIndicator.addItemFlow('awaiting_quantity')
 
       await ctx.editMessageText(
-        `✅ **الوحدة:** ${unit}\n\n`
+        progress + '\n\n'
+        + `✅ **الوحدة:** ${unit}\n\n`
         + '📦 **أدخل الكمية:**\n\n'
         + '**مثال:** 50\n\n'
         + '⏳ **في انتظار الإدخال...**',
         {
-          reply_markup: new InlineKeyboard().text('❌ إلغاء', 'og:items:menu'),
+          reply_markup: keyboard,
           parse_mode: 'Markdown',
         },
       )
@@ -380,54 +458,60 @@ export class AddItemConversation {
 
   /**
    * Handle unit capacity input
+   * ✅ Using validateNumber and updateSessionStep
    */
   static async handleUnitCapacityInput(ctx: Context, text: string) {
+    if (!isStep(ctx, 'awaiting_unit_capacity')) return false
+
     const state = ctx.session.inventoryForm
-    if (!state || state.step !== 'awaiting_unit_capacity')
-      return false
+    if (!state) return false
 
-    const capacity = Number.parseFloat(text)
-
-    if (Number.isNaN(capacity) || capacity <= 0) {
-      await ctx.reply('❌ السعة غير صحيحة')
+    // ✅ استخدام validator
+    const validation = validateNumber(text, { min: 0.01 })
+    if (!validation.valid) {
+      await ctx.reply(validation.error!)
       return true
     }
 
-    ctx.session.inventoryForm = {
-      ...state,
-      step: 'awaiting_quantity',
-      warehouse: 'oils-greases',
-      data: { ...state.data, unitCapacity: capacity },
-    }
+    const capacity = validation.value!
+    
+    // ✅ استخدام updateSessionStep
+    updateSessionStep(ctx, 'awaiting_quantity', { unitCapacity: capacity })
 
-    await ctx.reply(
+    const keyboard = buildActionButtons([
+      { text: '❌ إلغاء', callback: 'og:items:menu' },
+    ])
+
+    const sentMessage = await ctx.reply(
       `✅ **سعة ${state.data.unit}:** ${capacity} لتر\n\n`
       + '📦 **أدخل الكمية:**\n\n'
       + '**مثال:** 50\n\n'
       + '⏳ **في انتظار الإدخال...**',
       {
-        reply_markup: new InlineKeyboard().text('❌ إلغاء', 'og:items:menu'),
+        reply_markup: keyboard,
         parse_mode: 'Markdown',
       },
     )
-
+    
+    MessageTracker.track(ctx, sentMessage.message_id)
     return true
   }
 
   /**
    * Confirm default capacity
+   * ✅ Using updateSessionStep
    */
   static async confirmCapacity(ctx: Context, capacity: number) {
-    const state = ctx.session.inventoryForm
-    if (!state || state.step !== 'awaiting_unit_capacity')
-      return
+    if (!isStep(ctx, 'awaiting_unit_capacity')) return
 
-    ctx.session.inventoryForm = {
-      ...state,
-      step: 'awaiting_quantity',
-      warehouse: 'oils-greases',
-      data: { ...state.data, unitCapacity: capacity },
-    }
+    const state = ctx.session.inventoryForm
+    if (!state) return
+
+    updateSessionStep(ctx, 'awaiting_quantity', { unitCapacity: capacity })
+
+    const keyboard = buildActionButtons([
+      { text: '❌ إلغاء', callback: 'og:items:menu' },
+    ])
 
     await ctx.editMessageText(
       `✅ **سعة ${state.data.unit}:** ${capacity} لتر\n\n`
@@ -435,7 +519,7 @@ export class AddItemConversation {
       + '**مثال:** 50\n\n'
       + '⏳ **في انتظار الإدخال...**',
       {
-        reply_markup: new InlineKeyboard().text('❌ إلغاء', 'og:items:menu'),
+        reply_markup: keyboard,
         parse_mode: 'Markdown',
       },
     )
@@ -443,35 +527,40 @@ export class AddItemConversation {
 
   /**
    * Handle quantity input
+   * ✅ Using validateQuantity and updateSessionStep
    */
   static async handleQuantityInput(ctx: Context, text: string) {
+    if (!isStep(ctx, 'awaiting_quantity')) return false
+
     const state = ctx.session.inventoryForm
-    if (!state || state.step !== 'awaiting_quantity')
-      return false
+    if (!state) return false
 
-    const quantity = Number.parseFloat(text)
-
-    if (Number.isNaN(quantity) || quantity <= 0) {
-      await ctx.reply('❌ الكمية غير صحيحة')
+    // ✅ استخدام validateQuantity
+    const validation = validateQuantity(text)
+    if (!validation.valid) {
+      await ctx.reply(validation.error!)
       return true
     }
+
+    const quantity = validation.value!
 
     // للبرميل: نحسب السعة الإجمالية باللتر
     const totalLiters = (state.data.unit === 'برميل' && state.data.unitCapacity) 
       ? quantity * state.data.unitCapacity 
       : null
     
-    ctx.session.inventoryForm = {
-      ...state,
-      step: 'awaiting_min_quantity',
-      warehouse: 'oils-greases',
-      data: { ...state.data, quantity, totalLiters },
+    // ✅ استخدام updateSessionStep
+    updateSessionStep(ctx, 'awaiting_min_quantity', { quantity, totalLiters })
+    
+    // ✏️ Handle edit mode using utility
+    if (await EditModeHandler.handleIfEditMode(ctx, 'الكمية', AddItemConversation.showFinalReview)) {
+      return true
     }
 
-    const keyboard = new InlineKeyboard()
-      .text('⏭️ تخطي', 'og:items:add:skip_min_quantity')
-      .row()
-      .text('❌ إلغاء', 'og:items:menu')
+    const keyboard = buildActionButtons([
+      { text: '⏭️ تخطي', callback: 'og:items:add:skip_min_quantity' },
+      { text: '❌ إلغاء', callback: 'og:items:menu' },
+    ])
 
     let message = `✅ **الكمية:** ${quantity} ${state.data.unit}\n`
     if (totalLiters) {
@@ -484,45 +573,49 @@ export class AddItemConversation {
     message += '**مثال:** 10\n\n'
     message += '💡 *سيتم تنبيهك عند الوصول لهذا الحد*'
     
-    await ctx.reply(
-      message,
-      {
-        reply_markup: keyboard,
-        parse_mode: 'Markdown',
-      },
-    )
-
+    const sentMessage = await ctx.reply(message, {
+      reply_markup: keyboard,
+      parse_mode: 'Markdown',
+    })
+    
+    MessageTracker.track(ctx, sentMessage.message_id)
     return true
   }
 
   /**
    * Handle min quantity input
+   * ✅ Using validateNumber and updateSessionStep
+   * ✏️ Supports edit mode
    */
   static async handleMinQuantityInput(ctx: Context, text: string) {
+    if (!isStep(ctx, 'awaiting_min_quantity')) return false
+
     const state = ctx.session.inventoryForm
-    if (!state || state.step !== 'awaiting_min_quantity')
-      return false
+    if (!state) return false
 
-    const minQuantity = Number.parseFloat(text)
-
-    if (Number.isNaN(minQuantity) || minQuantity < 0) {
-      await ctx.reply('❌ الحد الأدنى غير صحيح')
+    // ✅ استخدام validator
+    const validation = validateNumber(text, { min: 0 })
+    if (!validation.valid) {
+      await ctx.reply(validation.error!)
       return true
     }
 
-    ctx.session.inventoryForm = {
-      ...state,
-      step: 'awaiting_price',
-      warehouse: 'oils-greases',
-      data: { ...state.data, minQuantity },
+    const minQuantity = validation.value!
+
+    // ✅ استخدام updateSessionStep
+    updateSessionStep(ctx, 'awaiting_price', { minQuantity })
+    
+    // ✏️ Handle edit mode using utility
+    if (await EditModeHandler.handleIfEditMode(ctx, 'الحد الأدنى', AddItemConversation.showFinalReview)) {
+      return true
     }
 
-    const keyboard = new InlineKeyboard()
-      .text('⏭️ تخطي', 'og:items:add:skip_price')
-      .row()
-      .text('❌ إلغاء', 'og:items:menu')
+    const keyboard = buildActionButtons([
+      { text: '⏭️ تخطي', callback: 'og:items:add:skip_price' },
+      { text: '❌ إلغاء', callback: 'og:items:menu' },
+    ])
 
-    await ctx.reply(
+    const sentMessage = await ctx.reply(
       `✅ **الحد الأدنى:** ${minQuantity} ${state.data.unit}\n\n`
       + '💰 **أدخل سعر الوحدة (اختياري):**\n\n'
       + '**مثال:** 150.50',
@@ -531,29 +624,25 @@ export class AddItemConversation {
         parse_mode: 'Markdown',
       },
     )
-
+    
+    MessageTracker.track(ctx, sentMessage.message_id)
     return true
   }
 
   /**
    * Skip min quantity
+   * ✅ Using updateSessionStep
    */
   static async skipMinQuantity(ctx: Context) {
     const state = ctx.session.inventoryForm
-    if (!state)
-      return
+    if (!state) return
 
-    ctx.session.inventoryForm = {
-      ...state,
-      step: 'awaiting_price',
-      warehouse: 'oils-greases',
-      data: { ...state.data, minQuantity: 5 },
-    }
+    updateSessionStep(ctx, 'awaiting_price', { minQuantity: 5 })
 
-    const keyboard = new InlineKeyboard()
-      .text('⏭️ تخطي', 'og:items:add:skip_price')
-      .row()
-      .text('❌ إلغاء', 'og:items:menu')
+    const keyboard = buildActionButtons([
+      { text: '⏭️ تخطي', callback: 'og:items:add:skip_price' },
+      { text: '❌ إلغاء', callback: 'og:items:menu' },
+    ])
 
     await ctx.editMessageText(
       '⏭️ **تم تعيين الحد الأدنى: 5**\n\n'
@@ -568,33 +657,39 @@ export class AddItemConversation {
 
   /**
    * Handle price input
+   * ✅ Using validatePrice, formatArabicCurrency, updateSessionStep
    */
   static async handlePriceInput(ctx: Context, text: string) {
+    if (!isStep(ctx, 'awaiting_price')) return false
+
     const state = ctx.session.inventoryForm
-    if (!state || state.step !== 'awaiting_price')
-      return false
+    if (!state) return false
 
-    const unitPrice = Number.parseFloat(text)
-
-    if (Number.isNaN(unitPrice) || unitPrice < 0) {
-      await ctx.reply('❌ السعر غير صحيح')
+    // ✅ استخدام validatePrice
+    const validation = validatePrice(text)
+    if (!validation.valid) {
+      await ctx.reply(validation.error!)
       return true
     }
 
-    ctx.session.inventoryForm = {
-      ...state,
-      step: 'awaiting_supplier',
-      warehouse: 'oils-greases',
-      data: { ...state.data, unitPrice },
+    const unitPrice = validation.value!
+
+    // ✅ استخدام updateSessionStep
+    updateSessionStep(ctx, 'awaiting_supplier', { unitPrice })
+    
+    // ✏️ Handle edit mode using utility
+    if (await EditModeHandler.handleIfEditMode(ctx, 'السعر', AddItemConversation.showFinalReview)) {
+      return true
     }
 
-    const keyboard = new InlineKeyboard()
-      .text('⏭️ تخطي', 'og:items:add:skip_supplier')
-      .row()
-      .text('❌ إلغاء', 'og:items:menu')
+    const keyboard = buildActionButtons([
+      { text: '⏭️ تخطي', callback: 'og:items:add:skip_supplier' },
+      { text: '❌ إلغاء', callback: 'og:items:menu' },
+    ])
 
-    await ctx.reply(
-      `✅ **السعر:** ${unitPrice.toFixed(2)} جنيه\n\n`
+    const sentMessage = await ctx.reply(
+      // ✅ استخدام formatArabicCurrency
+      `✅ **السعر:** ${formatArabicCurrency(unitPrice)}\n\n`
       + '🏭 **أدخل اسم المورد (اختياري):**\n\n'
       + '**مثال:** شركة الزيوت المتحدة',
       {
@@ -602,64 +697,35 @@ export class AddItemConversation {
         parse_mode: 'Markdown',
       },
     )
-
-    return true
-  }
-
-  /**
-   * Handle notes input
-   */
-  static async handleNotesInput(ctx: Context, text: string) {
-    const state = ctx.session.inventoryForm
-    if (!state || state.step !== 'awaiting_notes')
-      return false
-
-    ctx.session.inventoryForm = {
-      ...state,
-      step: 'awaiting_images',
-      warehouse: 'oils-greases',
-      data: { ...state.data, notes: text },
-    }
-
-    const keyboard = new InlineKeyboard()
-      .text('✅ إنهاء وحفظ', 'og:items:add:skip_images')
-      .row()
-      .text('❌ إلغاء', 'og:items:menu')
-
-    await ctx.reply(
-      '✅ **تم حفظ الملاحظات**\n\n'
-      + '📸 **أرسل صور المنتج (اختياري):**\n\n'
-      + '📷 يمكنك إرسال صورة أو أكثر',
-      {
-        reply_markup: keyboard,
-        parse_mode: 'Markdown',
-      },
-    )
-
+    
+    MessageTracker.track(ctx, sentMessage.message_id)
     return true
   }
 
   /**
    * Handle supplier input
+   * ✅ Using updateSessionStep
    */
   static async handleSupplierInput(ctx: Context, text: string) {
-    const state = ctx.session.inventoryForm
-    if (!state || state.step !== 'awaiting_supplier')
-      return false
+    if (!isStep(ctx, 'awaiting_supplier')) return false
 
-    ctx.session.inventoryForm = {
-      ...state,
-      step: 'awaiting_notes',
-      warehouse: 'oils-greases',
-      data: { ...state.data, supplierName: text },
+    const state = ctx.session.inventoryForm
+    if (!state) return false
+
+    // ✅ استخدام updateSessionStep
+    updateSessionStep(ctx, 'awaiting_notes', { supplierName: text })
+    
+    // ✏️ Handle edit mode using utility
+    if (await EditModeHandler.handleIfEditMode(ctx, 'المورد', AddItemConversation.showFinalReview)) {
+      return false
     }
 
-    const keyboard = new InlineKeyboard()
-      .text('⏭️ تخطي', 'og:items:add:skip_notes')
-      .row()
-      .text('❌ إلغاء', 'og:items:menu')
+    const keyboard = buildActionButtons([
+      { text: '⏭️ تخطي', callback: 'og:items:add:skip_notes' },
+      { text: '❌ إلغاء', callback: 'og:items:menu' },
+    ])
 
-    await ctx.reply(
+    const sentMessage = await ctx.reply(
       `✅ **المورد:** ${text}\n\n`
       + '📝 **أدخل ملاحظات إضافية (اختياري):**\n\n'
       + '✅ رقم الموديل\n'
@@ -670,121 +736,125 @@ export class AddItemConversation {
         parse_mode: 'Markdown',
       },
     )
-
+    
+    MessageTracker.track(ctx, sentMessage.message_id)
     return true
   }
 
   /**
-   * Skip price
+   * Handle notes input
+   * ✅ Using updateSessionStep
    */
-  static async skipPrice(ctx: Context) {
-    const state = ctx.session.inventoryForm
-    if (!state)
-      return
+  static async handleNotesInput(ctx: Context, text: string) {
+    if (!isStep(ctx, 'awaiting_notes')) return false
 
-    ctx.session.inventoryForm = {
-      ...state,
-      step: 'awaiting_supplier',
-      warehouse: 'oils-greases',
-      data: { ...state.data, unitPrice: 0 },
+    const state = ctx.session.inventoryForm
+    if (!state) return false
+
+    updateSessionStep(ctx, 'awaiting_images', { notes: text })
+    
+    // ✏️ Handle edit mode using utility
+    if (await EditModeHandler.handleIfEditMode(ctx, 'الملاحظات', AddItemConversation.showFinalReview)) {
+      return false
     }
 
-    const keyboard = new InlineKeyboard()
-      .text('⏭️ تخطي', 'og:items:add:skip_supplier')
-      .row()
-      .text('❌ إلغاء', 'og:items:menu')
+    const keyboard = buildActionButtons([
+      { text: '✅ إنهاء وحفظ', callback: 'og:items:add:skip_images' },
+      { text: '❌ إلغاء', callback: 'og:items:menu' },
+    ])
 
-    await ctx.editMessageText(
-      '⏭️ **تم تخطي السعر**\n\n'
-      + '🏭 **أدخل اسم المورد (اختياري):**\n\n'
-      + '**مثال:** شركة الزيوت المتحدة',
-      {
-        reply_markup: keyboard,
-        parse_mode: 'Markdown',
-      },
-    )
-  }
-
-  /**
-   * Skip supplier
-   */
-  static async skipSupplier(ctx: Context) {
-    const state = ctx.session.inventoryForm
-    if (!state)
-      return
-
-    ctx.session.inventoryForm = {
-      ...state,
-      step: 'awaiting_notes',
-      warehouse: 'oils-greases',
-    }
-
-    const keyboard = new InlineKeyboard()
-      .text('⏭️ تخطي', 'og:items:add:skip_notes')
-      .row()
-      .text('❌ إلغاء', 'og:items:menu')
-
-    await ctx.editMessageText(
-      '⏭️ **تم تخطي المورد**\n\n'
-      + '📝 **أدخل ملاحظات إضافية (اختياري):**\n\n'
-      + '✅ رقم الموديل\n'
-      + '✅ الشركة المصنعة\n'
-      + '✅ أي معلومات أخرى',
-      {
-        reply_markup: keyboard,
-        parse_mode: 'Markdown',
-      },
-    )
-  }
-
-  /**
-   * Skip notes
-   */
-  static async skipNotes(ctx: Context) {
-    const state = ctx.session.inventoryForm
-    if (!state)
-      return
-
-    ctx.session.inventoryForm = {
-      ...state,
-      step: 'awaiting_images',
-      warehouse: 'oils-greases',
-    }
-
-    const keyboard = new InlineKeyboard()
-      .text('✅ إنهاء وحفظ', 'og:items:add:skip_images')
-      .row()
-      .text('❌ إلغاء', 'og:items:menu')
-
-    await ctx.editMessageText(
-      '⏭️ **تم تخطي الملاحظات**\n\n'
-      + '📸 **أرسل صور المنتج (اختياري):**\n\n'
+    const sentMessage = await ctx.reply(
+      buildSuccessMessage('حفظ الملاحظات')
+      + '\n\n📸 **أرسل صور المنتج (اختياري):**\n\n'
       + '📷 يمكنك إرسال صورة أو أكثر',
       {
         reply_markup: keyboard,
         parse_mode: 'Markdown',
       },
     )
+    
+    MessageTracker.track(ctx, sentMessage.message_id)
+    return true
+  }
+
+  /**
+   * Skip price
+   * ⚡ Using ConversationStep.skip (اختصار 16 أسطر)
+   */
+  static async skipPrice(ctx: Context) {
+    const state = ctx.session.inventoryForm
+    if (!state) return
+
+    // ⚡ استخدام ConversationStep.skip بدلاً من الكود اليدوي
+    await ConversationStep.skip(ctx, {
+      skippedField: 'السعر',
+      nextStep: 'awaiting_supplier',
+      nextPrompt: '🏭 **أدخل اسم المورد (اختياري):**\n\n**مثال:** شركة الزيوت المتحدة',
+      skipCallback: 'og:items:add:skip_supplier',
+      cancelCallback: 'og:items:menu',
+      defaultValue: 0,
+      valueKey: 'unitPrice',
+    })
+  }
+
+  /**
+   * Skip supplier
+   * ⚡ Using ConversationStep.skip (اختصار 18 أسطر)
+   */
+  static async skipSupplier(ctx: Context) {
+    const state = ctx.session.inventoryForm
+    if (!state) return
+
+    // ⚡ استخدام ConversationStep.skip بدلاً من الكود اليدوي
+    await ConversationStep.skip(ctx, {
+      skippedField: 'المورد',
+      nextStep: 'awaiting_notes',
+      nextPrompt: '📝 **أدخل ملاحظات إضافية (اختياري):**\n\n'
+        + '✅ رقم الموديل\n'
+        + '✅ الشركة المصنعة\n'
+        + '✅ أي معلومات أخرى',
+      skipCallback: 'og:items:add:skip_notes',
+      cancelCallback: 'og:items:menu',
+    })
+  }
+
+  /**
+   * Skip notes
+   * ⚡ Using ConversationStep.skip (اختصار 16 أسطر)
+   */
+  static async skipNotes(ctx: Context) {
+    const state = ctx.session.inventoryForm
+    if (!state) return
+
+    // ⚡ استخدام ConversationStep.skip بدلاً من الكود اليدوي
+    await ConversationStep.skip(ctx, {
+      skippedField: 'الملاحظات',
+      nextStep: 'awaiting_images',
+      nextPrompt: '📸 **أرسل صور المنتج (اختياري):**\n\n📷 يمكنك إرسال صورة أو أكثر',
+      skipCallback: 'og:items:add:skip_images',
+      skipText: '✅ إنهاء وحفظ',
+      cancelCallback: 'og:items:menu',
+    })
   }
 
   /**
    * Skip images and save
    */
   static async skipImages(ctx: Context) {
-    await this.showFinalReview(ctx)
+    await AddItemConversation.showFinalReview(ctx)
   }
 
   /**
    * Show final review
+   * ✅ Using formatArabicCurrency and buildConfirmKeyboard
    */
   static async showFinalReview(ctx: Context) {
     const state = ctx.session.inventoryForm
-    if (!state)
-      return
+    if (!state) return
 
     const data = state.data as AddItemData
     const [category, location] = await Promise.all([
-      Database.prisma.iNV_OilsGreasesCategory.findUnique({ where: { id: data.categoryId } }),
+      Database.prisma.iNV_Category.findUnique({ where: { id: data.categoryId } }),
       data.locationId ? Database.prisma.iNV_StorageLocation.findUnique({ where: { id: data.locationId } }) : null,
     ])
 
@@ -819,8 +889,9 @@ export class AddItemConversation {
     message += '\n'
     
     message += '💰 **الأسعار:**\n\n'
-    message += `• سعر الوحدة: ${data.unitPrice.toFixed(2)} جنيه\n`
-    message += `• القيمة الإجمالية: ${totalValue.toFixed(2)} جنيه\n`
+    // ✅ استخدام formatArabicCurrency
+    message += `• سعر الوحدة: ${formatArabicCurrency(data.unitPrice)}\n`
+    message += `• القيمة الإجمالية: ${formatArabicCurrency(totalValue)}\n`
     message += '\n'
     
     if (data.supplierName) {
@@ -840,24 +911,35 @@ export class AddItemConversation {
     message += '═══════════════════\n\n'
     message += '**هل تريد تأكيد الحفظ？**'
 
-    const keyboard = new InlineKeyboard()
-      .text('✅ تأكيد الحفظ', 'og:items:add:confirm_save')
-      .row()
-      .text('❌ إلغاء', 'og:items:menu')
+    // ⚡ استخدام EditManager لإضافة قائمة التعديل
+    const keyboard = EditManager.buildAddItemEditMenu(data, 'og:items:add')
+    
+    // إضافة أزرار التأكيد والإلغاء
+    keyboard.row(
+      { text: '✅ تأكيد الحفظ', callback_data: 'og:items:add:confirm_save' }
+    )
+    keyboard.row(
+      { text: '✏️ تعديل بيان', callback_data: 'og:items:add:edit_menu' }
+    )
+    keyboard.row(
+      { text: '❌ إلغاء', callback_data: 'og:items:menu' }
+    )
 
-    await ctx.reply(message, {
+    const sentMessage = await ctx.reply(message, {
       reply_markup: keyboard,
       parse_mode: 'Markdown',
     })
+    
+    MessageTracker.track(ctx, sentMessage.message_id)
   }
 
   /**
    * Confirm and save
+   * ✅ Using buildSuccessMessage, formatArabicCurrency, clearInventorySession
    */
   static async confirmSave(ctx: Context) {
     const state = ctx.session.inventoryForm
-    if (!state)
-      return
+    if (!state) return
 
     const data = state.data as AddItemData
 
@@ -865,73 +947,58 @@ export class AddItemConversation {
       const item = await AddItemService.saveItem(data, BigInt(ctx.from!.id))
 
       const [category, location] = await Promise.all([
-        Database.prisma.iNV_OilsGreasesCategory.findUnique({ where: { id: data.categoryId } }),
+        Database.prisma.iNV_Category.findUnique({ where: { id: data.categoryId } }),
         data.locationId ? Database.prisma.iNV_StorageLocation.findUnique({ where: { id: data.locationId } }) : null,
       ])
 
-      ctx.session.inventoryForm = undefined
+      // ⚡ استخدام MessageTracker.deleteAll بدلاً من deleteAllMessages
+      await MessageTracker.deleteAll(ctx)
+      
+      // ✅ استخدام clearInventorySession
+      clearInventorySession(ctx)
 
       AddItemService.sendReportToAdmins(ctx, item, category, location).catch(console.error)
 
-      const images = item.images ? JSON.parse(item.images as string) : []
+      // ⚡ استخدام DetailFormatter.formatItemDetails (اختصار 45 سطر إلى 8)
+      const itemWithRelations = {
+        ...item,
+        category,
+        location,
+      }
 
-      let message = '✅ **تم حفظ الصنف بنجاح!**\n\n'
-      message += '═══════════════════\n\n'
+      let message = buildSuccessMessage('حفظ الصنف') + '\n\n'
+      message += DetailFormatter.formatItemDetails(itemWithRelations, {
+        showHeader: false,
+        showWarnings: false,
+        showTimestamps: false,
+      })
       
-      message += '📝 **معلومات الصنف:**\n'
-      message += '─────────────────────\n'
-      message += `• الباركود: \`${item.barcode}\`\n`
-      message += `• الكود: \`${item.code}\`\n`
-      message += `• الاسم (عربي): **${item.nameAr}**\n`
-      if (item.nameEn) message += `• الاسم (إنجليزي): ${item.nameEn}\n`
-      message += '\n'
-      
-      message += '🏷️ **التصنيف:**\n'
-      message += '─────────────────────\n'
-      message += `• الفئة: ${category?.nameAr || 'غير محدد'}\n`
-      message += `• الموقع: ${location?.nameAr || 'غير محدد'}\n`
-      message += '\n'
-      
-      message += '📦 **الكميات:**\n'
-      message += '─────────────────────\n'
-      message += `• الوحدة: ${item.unit}\n`
-      message += `• الكمية: **${item.quantity}** ${item.unit}\n`
-      message += `• الحد الأدنى: ${item.minQuantity} ${item.unit}\n`
-      message += '\n'
-      
-      message += '💰 **المعلومات المالية:**\n'
-      message += '─────────────────────\n'
-      message += `• سعر الوحدة: ${item.unitPrice.toFixed(2)} جنيه\n`
-      message += `• القيمة الإجمالية: **${item.totalValue.toFixed(2)}** جنيه\n`
-      message += '\n'
-      
-      if (item.supplierName) {
-        message += `🏭 **المورد:** ${item.supplierName}\n\n`
+      // إضافة معلومات الصور إذا وجدت
+      const imagesCount = (data.images || []).length
+      if (imagesCount > 0) {
+        message += `\n📸 **الصور:** ${imagesCount} صورة\n`
       }
       
-      if (images.length > 0) {
-        message += `📸 **الصور:** ${images.length} صورة\n\n`
-      }
-      
-      if (item.notes) {
-        message += `📝 **ملاحظات:** ${item.notes}\n\n`
-      }
-      
-      message += '═══════════════════\n'
+      message += '\n═══════════════════\n'
       message += '📨 **تم إرسال تقرير للمسؤولين**'
 
-      await ctx.editMessageText(message, {
-        reply_markup: new InlineKeyboard()
-          .text('➕ إضافة صنف آخر', 'og:items:add:start')
-          .row()
-          .text('⬅️ القائمة الرئيسية', 'og:items:menu'),
+      // ✅ استخدام buildActionButtons
+      const keyboard = buildActionButtons([
+        { text: '➕ إضافة صنف آخر', callback: 'og:items:add:start' },
+        { text: '⬅️ القائمة الرئيسية', callback: 'og:items:menu' },
+      ])
+
+      await ctx.reply(message, {
+        reply_markup: keyboard,
         parse_mode: 'Markdown',
       })
     }
     catch (error) {
       console.error('Error saving item:', error)
-      await ctx.editMessageText('❌ حدث خطأ أثناء الحفظ')
-      ctx.session.inventoryForm = undefined
+      await MessageTracker.deleteAll(ctx)
+      // ✅ استخدام buildErrorMessage
+      await ctx.reply(buildErrorMessage('الحفظ'))
+      clearInventorySession(ctx)
     }
   }
 }

@@ -9,16 +9,16 @@ export class PurchaseReportService {
     startDate?: Date
     endDate?: Date
   }) {
-    const where: any = {}
+    const where: any = { transactionType: 'PURCHASE' }
     
     if (filters.itemId) where.itemId = filters.itemId
     if (filters.startDate || filters.endDate) {
-      where.purchaseDate = {}
-      if (filters.startDate) where.purchaseDate.gte = filters.startDate
-      if (filters.endDate) where.purchaseDate.lte = filters.endDate
+      where.transactionDate = {}
+      if (filters.startDate) where.transactionDate.gte = filters.startDate
+      if (filters.endDate) where.transactionDate.lte = filters.endDate
     }
 
-    const purchases = await Database.prisma.iNV_OilsGreasesPurchase.findMany({
+    const purchases = await Database.prisma.iNV_Transaction.findMany({
       where,
       include: {
         item: {
@@ -28,36 +28,36 @@ export class PurchaseReportService {
           },
         },
       },
-      orderBy: { purchaseDate: 'desc' },
+      orderBy: { transactionDate: 'desc' },
     })
 
     // Statistics
     const totalPurchases = purchases.length
-    const totalQuantity = purchases.reduce((sum, p) => sum + p.quantity, 0)
-    const totalCost = purchases.reduce((sum, p) => sum + p.totalCost, 0)
-    const uniqueItems = new Set(purchases.map(p => p.itemId)).size
-    const uniqueSuppliers = new Set(purchases.map(p => p.supplierName).filter(Boolean)).size
+    const totalQuantity = purchases.reduce((sum: number, p: any) => sum + p.quantity, 0)
+    const totalCost = purchases.reduce((sum: number, p: any) => sum + (p.unitPrice * p.quantity), 0)
+    const uniqueItems = new Set(purchases.map((p: any) => p.itemId)).size
+    const uniqueSuppliers = new Set(purchases.map((p: any) => p.item.supplierName).filter(Boolean)).size
 
     // Group by item
-    const itemStats = purchases.reduce((acc, p) => {
+    const itemStats = purchases.reduce((acc: any, p: any) => {
       const key = p.item.nameAr
       if (!acc[key]) {
         acc[key] = { quantity: 0, cost: 0, count: 0 }
       }
       acc[key].quantity += p.quantity
-      acc[key].cost += p.totalCost
+      acc[key].cost += (p.unitPrice * p.quantity)
       acc[key].count += 1
       return acc
     }, {} as Record<string, { quantity: number; cost: number; count: number }>)
 
     // Group by supplier
-    const supplierStats = purchases.reduce((acc, p) => {
-      const key = p.supplierName || 'غير محدد'
+    const supplierStats = purchases.reduce((acc: any, p: any) => {
+      const key = p.item.supplierName || 'غير محدد'
       if (!acc[key]) {
         acc[key] = { quantity: 0, cost: 0, count: 0 }
       }
       acc[key].quantity += p.quantity
-      acc[key].cost += p.totalCost
+      acc[key].cost += (p.unitPrice * p.quantity)
       acc[key].count += 1
       return acc
     }, {} as Record<string, { quantity: number; cost: number; count: number }>)
@@ -104,9 +104,9 @@ export class PurchaseReportService {
     XLSX.utils.book_append_sheet(wb, wsSummary, 'ملخص')
 
     // Sheet 2: All Purchases
-    const purchasesData = purchases.map(p => ({
-      'رقم العملية': p.purchaseNumber,
-      'التاريخ': new Date(p.purchaseDate).toLocaleString('ar-EG'),
+    const purchasesData = purchases.map((p: any) => ({
+      'رقم العملية': p.transactionNumber,
+      'التاريخ': new Date(p.transactionDate).toLocaleString('ar-EG'),
       'الصنف': p.item.nameAr,
       'الكود': p.item.code,
       'الفئة': p.item.category?.nameAr || '',
@@ -114,9 +114,9 @@ export class PurchaseReportService {
       'الكمية': p.quantity,
       'الوحدة': p.item.unit,
       'سعر الوحدة': p.unitPrice,
-      'التكلفة الإجمالية': p.totalCost,
-      'المورد': p.supplierName || '',
-      'رقم الفاتورة': p.invoiceNumber || '',
+      'التكلفة الإجمالية': (p.unitPrice * p.quantity).toFixed(2),
+      'المورد': p.item.supplierName || '',
+      'رقم الفاتورة': p.referenceNumber || '',
       'ملاحظات': p.notes || '',
     }))
 
@@ -129,7 +129,7 @@ export class PurchaseReportService {
     XLSX.utils.book_append_sheet(wb, wsPurchases, 'جميع العمليات')
 
     // Sheet 3: By Item
-    const itemStatsData = Object.entries(statistics.itemStats).map(([name, stats]) => ({
+    const itemStatsData = Object.entries(statistics.itemStats).map(([name, stats]: [string, any]) => ({
       'الصنف': name,
       'عدد العمليات': stats.count,
       'إجمالي الكمية': stats.quantity,
@@ -142,7 +142,7 @@ export class PurchaseReportService {
     XLSX.utils.book_append_sheet(wb, wsItems, 'حسب الصنف')
 
     // Sheet 4: By Supplier
-    const supplierStatsData = Object.entries(statistics.supplierStats).map(([name, stats]) => ({
+    const supplierStatsData = Object.entries(statistics.supplierStats).map(([name, stats]: [string, any]) => ({
       'المورد': name,
       'عدد العمليات': stats.count,
       'إجمالي الكمية': stats.quantity,
@@ -166,7 +166,7 @@ export class PurchaseReportService {
   }
 
   static async getItems() {
-    return await Database.prisma.iNV_OilsGreasesItem.findMany({
+    return await Database.prisma.iNV_Item.findMany({
       where: { isActive: true },
       select: { id: true, nameAr: true, code: true },
       orderBy: { nameAr: 'asc' },

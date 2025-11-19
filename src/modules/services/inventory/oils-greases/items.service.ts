@@ -36,13 +36,13 @@ export class OilsGreasesItemsService {
    * Generate unique code for oils/greases item
    */
   static async generateCode(categoryId: number): Promise<string> {
-    const category = await Database.prisma.iNV_OilsGreasesCategory.findUnique({
+    const category = await Database.prisma.iNV_Category.findUnique({
       where: { id: categoryId },
     })
 
-    if (!category) throw new Error('Category not found')
+    if (!category || !category.prefix) throw new Error('Category not found')
 
-    const lastItem = await Database.prisma.iNV_OilsGreasesItem.findFirst({
+    const lastItem = await Database.prisma.iNV_Item.findFirst({
       where: { categoryId },
       orderBy: { code: 'desc' },
     })
@@ -58,6 +58,7 @@ export class OilsGreasesItemsService {
 
   /**
    * Create new item
+   * Note: In the unified schema, we create INV_Item first, then INV_Stock
    */
   static async createItem(data: CreateItemData, userId: bigint) {
     // Validation
@@ -70,7 +71,7 @@ export class OilsGreasesItemsService {
 
     // Check barcode uniqueness
     if (data.barcode) {
-      const existing = await Database.prisma.iNV_OilsGreasesItem.findFirst({
+      const existing = await Database.prisma.iNV_Item.findFirst({
         where: { barcode: data.barcode, isActive: true }
       })
       if (existing) {
@@ -78,22 +79,21 @@ export class OilsGreasesItemsService {
       }
     }
 
-    const totalValue = data.quantity * data.unitPrice
-
-    return await Database.prisma.iNV_OilsGreasesItem.create({
+    // Create item first
+    const item = await Database.prisma.iNV_Item.create({
       data: {
         barcode: data.barcode || null,
         code: data.code,
         nameAr: data.nameAr,
         nameEn: data.nameEn || null,
         categoryId: data.categoryId,
-        locationId: data.locationId || null,
-        quantity: data.quantity,
+        locationId: data.locationId || null, // ✅ إضافة الموقع الافتراضي
         unit: data.unit,
         unitCapacity: data.unitCapacity || null,
         unitPrice: data.unitPrice,
-        totalValue,
         minQuantity: data.minQuantity || 5,
+        quantity: data.quantity, // ✅ إضافة الكمية
+        totalValue: data.quantity * data.unitPrice, // ✅ إضافة القيمة الإجمالية
         supplierName: data.supplierName || null,
         notes: data.notes || null,
         images: data.images ? JSON.stringify(data.images) : undefined,
@@ -101,27 +101,63 @@ export class OilsGreasesItemsService {
         isActive: true,
       },
     })
+
+    // Create initial stock if quantity > 0 and location provided
+    if (data.quantity > 0 && data.locationId) {
+      await Database.prisma.iNV_Stock.create({
+        data: {
+          itemId: item.id,
+          locationId: data.locationId,
+          quantity: data.quantity,
+          createdBy: userId,
+        },
+      })
+    }
+
+    return item
   }
 
   /**
    * Update item
+   * Note: quantity updates should be done via INV_Stock table
    */
   static async updateItem(id: number, data: UpdateItemData, userId: bigint) {
-    const item = await Database.prisma.iNV_OilsGreasesItem.findUnique({
+    const item = await Database.prisma.iNV_Item.findUnique({
       where: { id },
     })
 
     if (!item) throw new Error('Item not found')
 
-    const quantity = data.quantity ?? item.quantity
-    const unitPrice = data.unitPrice ?? item.unitPrice
-    const totalValue = quantity * unitPrice
+    // Handle quantity update via stock if needed
+    if (data.quantity !== undefined && data.locationId) {
+      const stock = await Database.prisma.iNV_Stock.findFirst({
+        where: { itemId: id, locationId: data.locationId },
+      })
 
-    return await Database.prisma.iNV_OilsGreasesItem.update({
+      if (stock) {
+        await Database.prisma.iNV_Stock.update({
+          where: { id: stock.id },
+          data: { quantity: data.quantity, updatedBy: userId },
+        })
+      } else {
+        await Database.prisma.iNV_Stock.create({
+          data: {
+            itemId: id,
+            locationId: data.locationId,
+            quantity: data.quantity,
+            createdBy: userId,
+          },
+        })
+      }
+    }
+
+    // Update item details (excluding quantity and locationId as they're in stock table)
+    const { quantity, locationId, ...itemData } = data
+
+    return await Database.prisma.iNV_Item.update({
       where: { id },
       data: {
-        ...data,
-        totalValue,
+        ...itemData,
         updatedBy: userId,
       },
     })
@@ -131,18 +167,17 @@ export class OilsGreasesItemsService {
    * Get item with full details
    */
   static async getItemWithDetails(id: number) {
-    return await Database.prisma.iNV_OilsGreasesItem.findUnique({
+    return await Database.prisma.iNV_Item.findUnique({
       where: { id },
       include: {
         category: true,
-        location: true,
-        purchases: {
-          orderBy: { purchaseDate: 'desc' },
-          take: 5,
+        stocks: {
+          include: { location: true },
         },
-        issuances: {
-          orderBy: { issuanceDate: 'desc' },
-          take: 5,
+        transactions: {
+          orderBy: { createdAt: 'desc' },
+          take: 10,
+          include: { location: true },
         },
       },
     })

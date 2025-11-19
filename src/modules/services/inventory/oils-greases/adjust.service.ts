@@ -28,7 +28,7 @@ export class OilsGreasesAdjustService {
     })
     const auditNumber = `AUD-OILS-${dateStr}-${String(count + 1).padStart(3, '0')}`
 
-    const items = await Database.prisma.iNV_OilsGreasesItem.findMany({
+    const items = await Database.prisma.iNV_Item.findMany({
       where: { isActive: true },
     })
 
@@ -117,18 +117,29 @@ export class OilsGreasesAdjustService {
       const adjustmentNumber = `ADJ-OILS-${dateStr}-${String(i + 1).padStart(3, '0')}`
 
       await Database.prisma.$transaction(async (tx) => {
-        await tx.iNV_OilsGreasesItem.update({
-          where: { id: item.itemId },
-          data: { quantity: item.actualQuantity },
+        // Update stock quantity
+        const stock = await tx.iNV_Stock.findFirst({
+          where: { 
+            itemId: item.itemId,
+            ...(item.locationId && { locationId: item.locationId })
+          }
         })
 
-        await tx.iNV_OilsGreasesAdjustment.create({
+        if (stock) {
+          await tx.iNV_Stock.update({
+            where: { id: stock.id },
+            data: { quantity: item.actualQuantity },
+          })
+        }
+
+        // Create adjustment transaction
+        await tx.iNV_Transaction.create({
           data: {
-            adjustmentNumber,
+            transactionNumber: adjustmentNumber,
+            transactionType: 'ADJUSTMENT',
             itemId: item.itemId,
-            quantityBefore: item.systemQuantity,
-            quantityAfter: item.actualQuantity,
-            quantityDifference: item.difference,
+            locationId: item.locationId,
+            quantity: Math.abs(item.difference),
             adjustmentType: item.difference > 0 ? 'INCREASE' : 'DECREASE',
             reason: `جرد مخزون - ${item.discrepancyType}`,
             createdBy: BigInt(userId),

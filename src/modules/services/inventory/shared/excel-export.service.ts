@@ -22,30 +22,31 @@ export class ExcelExportService {
       where.categoryId = { in: categoryIds }
     }
 
-    const items = warehouse === 'oils-greases'
-      ? await Database.prisma.iNV_OilsGreasesItem.findMany({
-          where,
-          include: { category: true, location: true },
-          orderBy: { code: 'asc' },
-        })
-      : await Database.prisma.iNV_SparePart.findMany({
-          where,
-          include: { category: true, location: true },
-          orderBy: { code: 'asc' },
-        })
+    const items = await Database.prisma.iNV_Item.findMany({
+      where,
+      include: { category: true, stocks: { include: { location: true } } },
+      orderBy: { code: 'asc' },
+    })
 
-    const data = items.map(item => ({
-      'الكود': item.code,
-      'الباركود': item.barcode || '',
-      'الاسم (عربي)': item.nameAr,
-      'الفئة': item.category?.nameAr || '',
-      'الموقع': item.location?.nameAr || '',
-      'الكمية': item.quantity,
-      'الوحدة': item.unit,
-      'الحد الأدنى': item.minQuantity,
-      'سعر الوحدة': item.unitPrice,
-      'القيمة الإجمالية': item.totalValue,
-    }))
+    const data = items.map(item => {
+      // Calculate total quantity from all stock locations
+      const totalQuantity = item.stocks.reduce((sum, stock) => sum + stock.quantity, 0)
+      const totalValue = item.unitPrice ? item.unitPrice * totalQuantity : 0
+      const primaryLocation = item.stocks[0]?.location?.nameAr || ''
+      
+      return {
+        'الكود': item.code,
+        'الباركود': item.barcode || '',
+        'الاسم (عربي)': item.nameAr,
+        'الفئة': item.category?.nameAr || '',
+        'الموقع': primaryLocation,
+        'الكمية': totalQuantity,
+        'الوحدة': item.unit,
+        'الحد الأدنى': item.minQuantity,
+        'سعر الوحدة': item.unitPrice,
+        'القيمة الإجمالية': totalValue,
+      }
+    })
 
     const ws = XLSX.utils.json_to_sheet(data)
     const wb = XLSX.utils.book_new()

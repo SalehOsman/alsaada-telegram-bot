@@ -64,8 +64,8 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:trans:item:(\d+)$/, async (ctx)
   const itemId = Number.parseInt(ctx.match![1], 10)
 
   try {
-    const transactions = await Database.prisma.iNV_SparePartTransaction.findMany({
-      where: { sparePartId: itemId },
+    const transactions = await Database.prisma.iNV_Transaction.findMany({
+      where: { itemId: itemId },
       orderBy: { createdAt: 'desc' },
       take: 20,
     })
@@ -156,7 +156,7 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:trans:in:list:(\d+)(?::(.+))?$/
         where.AND = [
           { quantity: { gt: 0 } },
           { OR: [
-            { quantity: { lt: Database.prisma.iNV_SparePart.fields.minQuantity } },
+            { quantity: { lt: Database.prisma.iNV_Item.fields.minQuantity } },
           ] },
         ]
       }
@@ -171,7 +171,7 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:trans:in:list:(\d+)(?::(.+))?$/
     }
 
     const [items, totalCount] = await Promise.all([
-      Database.prisma.iNV_SparePart.findMany({
+      Database.prisma.iNV_Item.findMany({
         where,
         skip,
         take: itemsPerPage,
@@ -181,7 +181,7 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:trans:in:list:(\d+)(?::(.+))?$/
           location: { select: { nameAr: true } },
         },
       }),
-      Database.prisma.iNV_SparePart.count({ where }),
+      Database.prisma.iNV_Item.count({ where }),
     ])
 
     const totalPages = Math.ceil(totalCount / itemsPerPage)
@@ -195,7 +195,7 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:trans:in:list:(\d+)(?::(.+))?$/
       message += '🟡 **الفلتر:** مخزون منخفض\n\n'
     }
     else if (filterType?.startsWith('category:')) {
-      const cat = await Database.prisma.iNV_EquipmentCategory.findUnique({
+      const cat = await Database.prisma.equipmentCategory.findUnique({
         where: { id: Number.parseInt(filterType.split(':')[1], 10) },
       })
       message += `📂 **الفلتر:** ${cat?.nameAr || 'فئة'}\n\n`
@@ -279,7 +279,7 @@ sparePartsTransactionsHandler.callbackQuery('sp:trans:in:filters', async (ctx) =
 
   try {
     const [categories, locations] = await Promise.all([
-      Database.prisma.iNV_EquipmentCategory.findMany({
+      Database.prisma.equipmentCategory.findMany({
         orderBy: { nameAr: 'asc' },
       }),
       Database.prisma.iNV_StorageLocation.findMany({
@@ -468,11 +468,11 @@ sparePartsTransactionsHandler.callbackQuery('sp:trans:in:scan', async (ctx) => {
 sparePartsTransactionsHandler.callbackQuery(/^sp:trans:in:select:(\d+)$/, async (ctx) => {
   await ctx.answerCallbackQuery()
 
-  const sparePartId = Number.parseInt(ctx.match![1], 10)
+  const itemId = Number.parseInt(ctx.match![1], 10)
 
   try {
-    const sparePart = await Database.prisma.iNV_SparePart.findUnique({
-      where: { id: sparePartId },
+    const sparePart = await Database.prisma.iNV_Item.findUnique({
+      where: { id: itemId },
       include: {
         category: { select: { nameAr: true } },
         location: { select: { nameAr: true } },
@@ -488,7 +488,7 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:trans:in:select:(\d+)$/, async 
     ;(ctx.session as any).purchaseForm = {
       step: 'invoice_number',
       data: {
-        sparePartId,
+        itemId,
         sparePartName: sparePart.nameAr,
         sparePartCode: sparePart.code,
         currentQuantity: sparePart.quantity,
@@ -584,7 +584,7 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:trans:out:list:(\d+)(?::(.+))?$
         where.AND = [
           { quantity: { gt: 0 } },
           { OR: [
-            { quantity: { lt: Database.prisma.iNV_SparePart.fields.minQuantity } },
+            { quantity: { lt: Database.prisma.iNV_Item.fields.minQuantity } },
           ] },
         ]
       }
@@ -599,7 +599,7 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:trans:out:list:(\d+)(?::(.+))?$
     }
 
     const [items, totalCount] = await Promise.all([
-      Database.prisma.iNV_SparePart.findMany({
+      Database.prisma.iNV_Item.findMany({
         where,
         skip,
         take: itemsPerPage,
@@ -609,7 +609,7 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:trans:out:list:(\d+)(?::(.+))?$
           location: { select: { nameAr: true } },
         },
       }),
-      Database.prisma.iNV_SparePart.count({ where }),
+      Database.prisma.iNV_Item.count({ where }),
     ])
 
     const totalPages = Math.ceil(totalCount / itemsPerPage)
@@ -623,7 +623,7 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:trans:out:list:(\d+)(?::(.+))?$
       message += '🟡 **الفلتر:** مخزون منخفض\n\n'
     }
     else if (filterType?.startsWith('category:')) {
-      const cat = await Database.prisma.iNV_EquipmentCategory.findUnique({
+      const cat = await Database.prisma.equipmentCategory.findUnique({
         where: { id: Number.parseInt(filterType.split(':')[1], 10) },
       })
       message += `📂 **الفلتر:** ${cat?.nameAr || 'فئة'}\n\n`
@@ -893,7 +893,7 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:trans:out:filter:(outofstock|lo
 sparePartsTransactionsHandler.callbackQuery('sp:trans:out:filter:category', async (ctx) => {
   await ctx.answerCallbackQuery()
 
-  const categories = await Database.prisma.iNV_EquipmentCategory.findMany({
+  const categories = await Database.prisma.equipmentCategory.findMany({
     where: { isActive: true },
     orderBy: { orderIndex: 'asc' },
   })
@@ -952,10 +952,10 @@ sparePartsTransactionsHandler.callbackQuery('sp:trans:out:filter:location', asyn
 // ════════════════════════════════════════════════════════
 // دالة مساعدة: عرض حالات القطعة للصرف
 // ════════════════════════════════════════════════════════
-async function showItemConditionsForIssue(ctx: any, sparePartId: number) {
+async function showItemConditionsForIssue(ctx: any, itemId: number) {
   try {
-    const sparePart = await Database.prisma.iNV_SparePart.findUnique({
-      where: { id: sparePartId },
+    const sparePart = await Database.prisma.iNV_Item.findUnique({
+      where: { id: itemId },
       include: {
         category: true,
         location: true,
@@ -990,7 +990,7 @@ async function showItemConditionsForIssue(ctx: any, sparePartId: number) {
     ;(ctx.session as any).issueForm = {
       step: 'awaiting_quantity',
       data: {
-        sparePartId: sparePart.id,
+        itemId: sparePart.id,
         sparePartName: sparePart.nameAr,
         sparePartCode: sparePart.code,
         availableQuantity: sparePart.quantity,
@@ -1031,16 +1031,16 @@ async function showItemConditionsForIssue(ctx: any, sparePartId: number) {
       message += '⬇️ **اضغط على الحالة المطلوبة**'
 
       if (sparePart.quantityNew > 0) {
-        conditionKeyboard.text(`🆕 جديد (${sparePart.quantityNew} متاح)`, `sp:trans:out:condition:new:${sparePartId}`).row()
+        conditionKeyboard.text(`🆕 جديد (${sparePart.quantityNew} متاح)`, `sp:trans:out:condition:new:${itemId}`).row()
       }
       if (sparePart.quantityImport > 0) {
-        conditionKeyboard.text(`📦 استيراد (${sparePart.quantityImport} متاح)`, `sp:trans:out:condition:import:${sparePartId}`).row()
+        conditionKeyboard.text(`📦 استيراد (${sparePart.quantityImport} متاح)`, `sp:trans:out:condition:import:${itemId}`).row()
       }
       if (sparePart.quantityRefurbished > 0) {
-        conditionKeyboard.text(`🔄 مجدد (${sparePart.quantityRefurbished} متاح)`, `sp:trans:out:condition:refurbished:${sparePartId}`).row()
+        conditionKeyboard.text(`🔄 مجدد (${sparePart.quantityRefurbished} متاح)`, `sp:trans:out:condition:refurbished:${itemId}`).row()
       }
       if (sparePart.quantityUsed > 0) {
-        conditionKeyboard.text(`♻️ مستعمل (${sparePart.quantityUsed} متاح)`, `sp:trans:out:condition:used:${sparePartId}`).row()
+        conditionKeyboard.text(`♻️ مستعمل (${sparePart.quantityUsed} متاح)`, `sp:trans:out:condition:used:${itemId}`).row()
       }
 
       conditionKeyboard.text('❌ إلغاء', 'sp:trans:out')
@@ -1089,7 +1089,7 @@ async function showTransferItemsList(ctx: any, page: number) {
   const skip = (page - 1) * pageSize
 
   const [spareParts, totalCount] = await Promise.all([
-    Database.prisma.iNV_SparePart.findMany({
+    Database.prisma.iNV_Item.findMany({
       skip,
       take: pageSize,
       orderBy: { code: 'asc' },
@@ -1098,7 +1098,7 @@ async function showTransferItemsList(ctx: any, page: number) {
         location: { select: { nameAr: true } },
       },
     }),
-    Database.prisma.iNV_SparePart.count(),
+    Database.prisma.iNV_Item.count(),
   ])
 
   const totalPages = Math.ceil(totalCount / pageSize)
@@ -1172,7 +1172,7 @@ async function filterReturnableTransactions(transactions: any[]) {
 
   for (const trans of transactions) {
     // حساب الكمية المرجعة من هذه العملية
-    const returnedQuantity = await Database.prisma.iNV_SparePartTransaction.aggregate({
+    const returnedQuantity = await Database.prisma.iNV_Transaction.aggregate({
       where: {
         transactionType: 'RETURN',
         notes: {
@@ -1205,11 +1205,11 @@ async function filterReturnableTransactions(transactions: any[]) {
 sparePartsTransactionsHandler.callbackQuery(/^sp:trans:out:select:(\d+)$/, async (ctx) => {
   await ctx.answerCallbackQuery()
 
-  const sparePartId = Number.parseInt(ctx.match![1], 10)
+  const itemId = Number.parseInt(ctx.match![1], 10)
 
   try {
-    const sparePart = await Database.prisma.iNV_SparePart.findUnique({
-      where: { id: sparePartId },
+    const sparePart = await Database.prisma.iNV_Item.findUnique({
+      where: { id: itemId },
       include: {
         category: true,
         location: true,
@@ -1234,7 +1234,7 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:trans:out:select:(\d+)$/, async
     ;(ctx.session as any).issueForm = {
       step: 'awaiting_quantity',
       data: {
-        sparePartId: sparePart.id,
+        itemId: sparePart.id,
         sparePartName: sparePart.nameAr,
         sparePartCode: sparePart.code,
         availableQuantity: sparePart.quantity,
@@ -1275,16 +1275,16 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:trans:out:select:(\d+)$/, async
       message += '⬇️ **اضغط على الحالة المطلوبة**'
 
       if (sparePart.quantityNew > 0) {
-        conditionKeyboard.text(`🆕 جديد (${sparePart.quantityNew} متاح)`, `sp:trans:out:condition:new:${sparePartId}`).row()
+        conditionKeyboard.text(`🆕 جديد (${sparePart.quantityNew} متاح)`, `sp:trans:out:condition:new:${itemId}`).row()
       }
       if (sparePart.quantityImport > 0) {
-        conditionKeyboard.text(`📦 استيراد (${sparePart.quantityImport} متاح)`, `sp:trans:out:condition:import:${sparePartId}`).row()
+        conditionKeyboard.text(`📦 استيراد (${sparePart.quantityImport} متاح)`, `sp:trans:out:condition:import:${itemId}`).row()
       }
       if (sparePart.quantityRefurbished > 0) {
-        conditionKeyboard.text(`🔄 مجدد (${sparePart.quantityRefurbished} متاح)`, `sp:trans:out:condition:refurbished:${sparePartId}`).row()
+        conditionKeyboard.text(`🔄 مجدد (${sparePart.quantityRefurbished} متاح)`, `sp:trans:out:condition:refurbished:${itemId}`).row()
       }
       if (sparePart.quantityUsed > 0) {
-        conditionKeyboard.text(`♻️ مستعمل (${sparePart.quantityUsed} متاح)`, `sp:trans:out:condition:used:${sparePartId}`).row()
+        conditionKeyboard.text(`♻️ مستعمل (${sparePart.quantityUsed} متاح)`, `sp:trans:out:condition:used:${itemId}`).row()
       }
 
       conditionKeyboard.text('❌ إلغاء', 'sp:trans:out')
@@ -1308,7 +1308,7 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:trans:out:select:(\d+)$/, async
       ;(ctx.session as any).issueForm = {
         step: 'awaiting_quantity',
         data: {
-          sparePartId: sparePart.id,
+          itemId: sparePart.id,
           sparePartName: sparePart.nameAr,
           sparePartCode: sparePart.code,
           selectedCondition: 'general', // حالة عامة للمنتجات القديمة
@@ -1340,11 +1340,11 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:trans:out:condition:(new|import
   await ctx.answerCallbackQuery()
 
   const condition = ctx.match![1] as 'new' | 'import' | 'refurbished' | 'used'
-  const sparePartId = Number.parseInt(ctx.match![2], 10)
+  const itemId = Number.parseInt(ctx.match![2], 10)
 
   try {
-    const sparePart = await Database.prisma.iNV_SparePart.findUnique({
-      where: { id: sparePartId },
+    const sparePart = await Database.prisma.iNV_Item.findUnique({
+      where: { id: itemId },
     })
 
     if (!sparePart) {
@@ -1392,7 +1392,7 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:trans:out:condition:(new|import
     ;(ctx.session as any).issueForm = {
       step: 'awaiting_quantity',
       data: {
-        sparePartId: sparePart.id,
+        itemId: sparePart.id,
         sparePartName: sparePart.nameAr,
         sparePartCode: sparePart.code,
         selectedCondition: condition,
@@ -1614,11 +1614,11 @@ sparePartsTransactionsHandler.callbackQuery('sp:trans:transfer:filters', async (
 sparePartsTransactionsHandler.callbackQuery(/^sp:trans:transfer:select:(\d+)$/, async (ctx) => {
   await ctx.answerCallbackQuery()
 
-  const sparePartId = Number.parseInt(ctx.match![1], 10)
+  const itemId = Number.parseInt(ctx.match![1], 10)
 
   try {
-    const sparePart = await Database.prisma.iNV_SparePart.findUnique({
-      where: { id: sparePartId },
+    const sparePart = await Database.prisma.iNV_Item.findUnique({
+      where: { id: itemId },
       include: {
         category: true,
         location: true,
@@ -1642,7 +1642,7 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:trans:transfer:select:(\d+)$/, 
     // حفظ بيانات القطعة في session
     ;(ctx.session as any).transferState = {
       step: 'awaiting_quantity',
-      sparePartId: sparePart.id,
+      itemId: sparePart.id,
       sparePartName: sparePart.nameAr,
       sparePartCode: sparePart.code,
       currentLocationId: sparePart.locationId,
@@ -1715,8 +1715,8 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:trans:transfer:location:(\d+)$/
 
     // عرض ملخص عملية النقل للمراجعة
     let message = `🔍 **مراجعة عملية النقل**\n\n`
-    message += `📦 **القطعة:** ${transferState.sparePartName}\n`
-    message += `🔤 **الكود:** \`${transferState.sparePartCode}\`\n\n`
+    message += `📦 **القطعة:** ${transferState.itemName}\n`
+    message += `🔤 **الكود:** \`${transferState.itemCode}\`\n\n`
     message += `━━━━━━━━━━━━━━\n\n`
     message += `📊 **الكمية المنقولة:** ${transferState.quantity}\n`
     message += `📍 **من:** ${transferState.currentLocationName}\n`
@@ -1756,8 +1756,8 @@ sparePartsTransactionsHandler.callbackQuery('sp:trans:transfer:confirm', async (
 
   try {
     // تحديث موقع القطعة
-    await Database.prisma.iNV_SparePart.update({
-      where: { id: transferState.sparePartId },
+    await Database.prisma.iNV_Item.update({
+      where: { id: transferState.itemId },
       data: {
         locationId: transferState.newLocationId,
       },
@@ -1776,11 +1776,11 @@ sparePartsTransactionsHandler.callbackQuery('sp:trans:transfer:confirm', async (
 
     const transactionNumber = `TRANS-${Date.now()}`
 
-    await Database.prisma.iNV_SparePartTransaction.create({
+    await Database.prisma.iNV_Transaction.create({
       data: {
         transactionNumber,
         transactionType: 'TRANSFER',
-        sparePartId: transferState.sparePartId,
+        itemId: transferState.itemId,
         quantity: transferState.quantity,
         quantityBefore: transferState.availableQuantity,
         quantityAfter: transferState.availableQuantity,
@@ -1797,8 +1797,8 @@ sparePartsTransactionsHandler.callbackQuery('sp:trans:transfer:confirm', async (
 
     // رسالة نجاح
     let message = `✅ **تم إتمام النقل بنجاح!**\n\n`
-    message += `📦 **المنتج:** ${transferState.sparePartName}\n`
-    message += `🔤 **الكود:** \`${transferState.sparePartCode}\`\n`
+    message += `📦 **المنتج:** ${transferState.itemName}\n`
+    message += `🔤 **الكود:** \`${transferState.itemCode}\`\n`
     message += `🔢 **رقم الحركة:** \`${transactionNumber}\`\n\n`
     message += `━━━━━━━━━━━━━━\n\n`
     message += `📊 **الكمية المنقولة:** ${transferState.quantity}\n`
@@ -1883,7 +1883,7 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:trans:return:list:(\d+)(?::(.+)
         where.AND = [
           { quantity: { gt: 0 } },
           { OR: [
-            { quantity: { lt: Database.prisma.iNV_SparePart.fields.minQuantity } },
+            { quantity: { lt: Database.prisma.iNV_Item.fields.minQuantity } },
           ] },
         ]
       }
@@ -1901,7 +1901,7 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:trans:return:list:(\d+)(?::(.+)
     }
 
     const [items, totalCount] = await Promise.all([
-      Database.prisma.iNV_SparePart.findMany({
+      Database.prisma.iNV_Item.findMany({
         where,
         skip,
         take: itemsPerPage,
@@ -1911,7 +1911,7 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:trans:return:list:(\d+)(?::(.+)
           location: { select: { nameAr: true } },
         },
       }),
-      Database.prisma.iNV_SparePart.count({ where }),
+      Database.prisma.iNV_Item.count({ where }),
     ])
 
     const totalPages = Math.ceil(totalCount / itemsPerPage)
@@ -1928,7 +1928,7 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:trans:return:list:(\d+)(?::(.+)
       message += '🟢 **الفلتر:** متوفر\n\n'
     }
     else if (filterType?.startsWith('category:')) {
-      const cat = await Database.prisma.iNV_EquipmentCategory.findUnique({
+      const cat = await Database.prisma.equipmentCategory.findUnique({
         where: { id: Number.parseInt(filterType.split(':')[1], 10) },
       })
       message += `📂 **الفلتر:** ${cat?.nameAr || 'فئة'}\n\n`
@@ -2119,7 +2119,7 @@ sparePartsTransactionsHandler.callbackQuery('sp:trans:return:filters', async (ct
 sparePartsTransactionsHandler.callbackQuery('sp:trans:return:filter:category', async (ctx) => {
   await ctx.answerCallbackQuery()
 
-  const categories = await Database.prisma.iNV_EquipmentCategory.findMany({
+  const categories = await Database.prisma.equipmentCategory.findMany({
     where: { isActive: true },
     orderBy: { orderIndex: 'asc' },
   })
@@ -2204,12 +2204,12 @@ sparePartsTransactionsHandler.callbackQuery('sp:trans:return:filter:stock', asyn
 sparePartsTransactionsHandler.callbackQuery(/^sp:trans:return:select:(\d+)$/, async (ctx) => {
   await ctx.answerCallbackQuery()
 
-  const sparePartId = Number.parseInt(ctx.match![1], 10)
+  const itemId = Number.parseInt(ctx.match![1], 10)
 
   try {
     // جلب بيانات الصنف
-    const sparePart = await Database.prisma.iNV_SparePart.findUnique({
-      where: { id: sparePartId },
+    const sparePart = await Database.prisma.iNV_Item.findUnique({
+      where: { id: itemId },
       include: {
         category: true,
         location: true,
@@ -2222,9 +2222,9 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:trans:return:select:(\d+)$/, as
     }
 
     // جلب آخر 10 عمليات صرف (OUT) لهذا الصنف
-    const allIssueTransactions = await Database.prisma.iNV_SparePartTransaction.findMany({
+    const allIssueTransactions = await Database.prisma.iNV_Transaction.findMany({
       where: {
-        sparePartId,
+        itemId,
         transactionType: 'OUT',
       },
       orderBy: {
@@ -2251,7 +2251,7 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:trans:return:select:(\d+)$/, as
     const availableTransactions = []
     for (const trans of allIssueTransactions) {
       // حساب مجموع الكميات المرجعة من هذه العملية
-      const returnedQuantity = await Database.prisma.iNV_SparePartTransaction.aggregate({
+      const returnedQuantity = await Database.prisma.iNV_Transaction.aggregate({
         where: {
           transactionType: 'RETURN',
           notes: {
@@ -2351,8 +2351,9 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:trans:return:quantity:(\d+)$/, 
 
   try {
     // جلب عملية الصرف الأصلية
-    const originalTransaction = await Database.prisma.iNV_SparePartTransaction.findUnique({
+    const originalTransaction = await Database.prisma.iNV_Transaction.findUnique({
       where: { id: transactionId },
+      include: { recipientEmployee: true },
     })
 
     if (!originalTransaction || originalTransaction.transactionType !== 'OUT') {
@@ -2361,8 +2362,8 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:trans:return:quantity:(\d+)$/, 
     }
 
     // جلب بيانات الصنف
-    const sparePart = await Database.prisma.iNV_SparePart.findUnique({
-      where: { id: originalTransaction.sparePartId },
+    const sparePart = await Database.prisma.iNV_Item.findUnique({
+      where: { id: originalTransaction.itemId },
       include: {
         category: true,
         location: true,
@@ -2375,7 +2376,7 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:trans:return:quantity:(\d+)$/, 
     }
 
     // حساب الكمية المتاحة للإرجاع
-    const returnedQuantity = await Database.prisma.iNV_SparePartTransaction.aggregate({
+    const returnedQuantity = await Database.prisma.iNV_Transaction.aggregate({
       where: {
         transactionType: 'RETURN',
         notes: {
@@ -2468,7 +2469,7 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:trans:return:custom:(\d+)$/, as
       transactionId,
     }
 
-    const originalTransaction = await Database.prisma.iNV_SparePartTransaction.findUnique({
+    const originalTransaction = await Database.prisma.iNV_Transaction.findUnique({
       where: { id: transactionId },
     })
 
@@ -2477,12 +2478,12 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:trans:return:custom:(\d+)$/, as
       return
     }
 
-    const sparePart = await Database.prisma.iNV_SparePart.findUnique({
-      where: { id: originalTransaction.sparePartId },
+    const sparePart = await Database.prisma.iNV_Item.findUnique({
+      where: { id: originalTransaction.itemId },
     })
 
     // حساب الكمية المتاحة للإرجاع
-    const returnedQuantity = await Database.prisma.iNV_SparePartTransaction.aggregate({
+    const returnedQuantity = await Database.prisma.iNV_Transaction.aggregate({
       where: {
         transactionType: 'RETURN',
         notes: {
@@ -2533,8 +2534,9 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:trans:return:confirm:(\d+):(\d+
 
   try {
     // جلب عملية الصرف الأصلية
-    const originalTransaction = await Database.prisma.iNV_SparePartTransaction.findUnique({
+    const originalTransaction = await Database.prisma.iNV_Transaction.findUnique({
       where: { id: transactionId },
+      include: { recipientEmployee: true },
     })
 
     if (!originalTransaction || originalTransaction.transactionType !== 'OUT') {
@@ -2543,7 +2545,7 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:trans:return:confirm:(\d+):(\d+
     }
 
     // حساب الكمية المتاحة للإرجاع
-    const returnedQuantity = await Database.prisma.iNV_SparePartTransaction.aggregate({
+    const returnedQuantity = await Database.prisma.iNV_Transaction.aggregate({
       where: {
         transactionType: 'RETURN',
         notes: {
@@ -2568,8 +2570,8 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:trans:return:confirm:(\d+):(\d+
     }
 
     // جلب بيانات الصنف
-    const sparePart = await Database.prisma.iNV_SparePart.findUnique({
-      where: { id: originalTransaction.sparePartId },
+    const sparePart = await Database.prisma.iNV_Item.findUnique({
+      where: { id: originalTransaction.itemId },
       include: {
         category: true,
         location: true,
@@ -2593,10 +2595,10 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:trans:return:confirm:(\d+):(\d+
     })}\n`
 
     // عرض اسم المستلم إن وجد
-    if (originalTransaction.employeeName) {
-      message += `👤 **المستلم:** ${originalTransaction.employeeName}`
-      if (originalTransaction.employeeCode) {
-        message += ` (${originalTransaction.employeeCode})`
+    if (originalTransaction.recipientEmployee) {
+      message += `👤 **المستلم:** ${originalTransaction.recipientEmployee.fullName}`
+      if (originalTransaction.recipientEmployee.employeeCode) {
+        message += ` (${originalTransaction.recipientEmployee.employeeCode})`
       }
       message += `\n`
     }
@@ -2709,8 +2711,9 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:trans:return:skip_notes:(\d+):(
 
   // العودة لصفحة التأكيد
   try {
-    const originalTransaction = await Database.prisma.iNV_SparePartTransaction.findUnique({
+    const originalTransaction = await Database.prisma.iNV_Transaction.findUnique({
       where: { id: transactionId },
+      include: { recipientEmployee: true },
     })
 
     if (!originalTransaction) {
@@ -2718,8 +2721,8 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:trans:return:skip_notes:(\d+):(
       return
     }
 
-    const sparePart = await Database.prisma.iNV_SparePart.findUnique({
-      where: { id: originalTransaction.sparePartId },
+    const sparePart = await Database.prisma.iNV_Item.findUnique({
+      where: { id: originalTransaction.itemId },
       include: {
         category: true,
         location: true,
@@ -2743,10 +2746,10 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:trans:return:skip_notes:(\d+):(
     })}\n`
     
     // عرض اسم المستلم إن وجد
-    if (originalTransaction.employeeName) {
-      message += `👤 **المستلم:** ${originalTransaction.employeeName}`
-      if (originalTransaction.employeeCode) {
-        message += ` (${originalTransaction.employeeCode})`
+    if (originalTransaction.recipientEmployee) {
+      message += `👤 **المستلم:** ${originalTransaction.recipientEmployee.fullName}`
+      if (originalTransaction.recipientEmployee.employeeCode) {
+        message += ` (${originalTransaction.recipientEmployee.employeeCode})`
       }
       message += `\n`
     }
@@ -2806,8 +2809,9 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:trans:return:execute:(\d+):(\d+
 
   try {
     // جلب عملية الصرف الأصلية
-    const originalTransaction = await Database.prisma.iNV_SparePartTransaction.findUnique({
+    const originalTransaction = await Database.prisma.iNV_Transaction.findUnique({
       where: { id: originalTransactionId },
+      include: { recipientEmployee: true },
     })
 
     if (!originalTransaction) {
@@ -2825,8 +2829,8 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:trans:return:execute:(\d+):(\d+
     }
 
     // جلب بيانات الصنف
-    const sparePart = await Database.prisma.iNV_SparePart.findUnique({
-      where: { id: originalTransaction.sparePartId },
+    const sparePart = await Database.prisma.iNV_Item.findUnique({
+      where: { id: originalTransaction.itemId },
       include: {
         category: true,
         location: true,
@@ -2839,7 +2843,7 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:trans:return:execute:(\d+):(\d+
     }
 
     // تحديث الكمية (إضافة الكمية المرجعة)
-    await Database.prisma.iNV_SparePart.update({
+    await Database.prisma.iNV_Item.update({
       where: { id: sparePart.id },
       data: {
         quantity: sparePart.quantity + returnQuantity,
@@ -2858,11 +2862,11 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:trans:return:execute:(\d+):(\d+
       notesText += ` | ${returnNotes}`
     }
 
-    await Database.prisma.iNV_SparePartTransaction.create({
+    await Database.prisma.iNV_Transaction.create({
       data: {
         transactionNumber: returnTransactionNumber,
         transactionType: 'RETURN',
-        sparePartId: sparePart.id,
+        itemId: sparePart.id,
         quantity: returnQuantity,
         quantityBefore: sparePart.quantity,
         quantityAfter: sparePart.quantity + returnQuantity,
@@ -2883,10 +2887,10 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:trans:return:execute:(\d+):(\d+
     message += `🔗 **عملية الصرف الأصلية:** \`${originalTransaction.transactionNumber}\`\n`
     
     // عرض اسم المستلم إن وجد
-    if (originalTransaction.employeeName) {
-      message += `👤 **المستلم الأصلي:** ${originalTransaction.employeeName}`
-      if (originalTransaction.employeeCode) {
-        message += ` (${originalTransaction.employeeCode})`
+    if (originalTransaction.recipientEmployee) {
+      message += `👤 **المستلم الأصلي:** ${originalTransaction.recipientEmployee.fullName}`
+      if (originalTransaction.recipientEmployee.employeeCode) {
+        message += ` (${originalTransaction.recipientEmployee.employeeCode})`
       }
       message += `\n`
     }
@@ -2985,7 +2989,7 @@ sparePartsTransactionsHandler.callbackQuery('sp:audit:full', async (ctx) => {
 
   try {
     // عد الأصناف
-    const totalItems = await Database.prisma.iNV_SparePart.count({
+    const totalItems = await Database.prisma.iNV_Item.count({
       where: { isActive: true },
     })
 
@@ -3022,12 +3026,12 @@ sparePartsTransactionsHandler.callbackQuery('sp:audit:category', async (ctx) => 
   await ctx.answerCallbackQuery()
 
   try {
-    const categories = await Database.prisma.iNV_EquipmentCategory.findMany({
+    const categories = await Database.prisma.iNV_Category.findMany({
       where: { isActive: true },
       orderBy: { orderIndex: 'asc' },
       include: {
         _count: {
-          select: { spareParts: true },
+          select: { items: true },
         },
       },
     })
@@ -3036,7 +3040,7 @@ sparePartsTransactionsHandler.callbackQuery('sp:audit:category', async (ctx) => 
 
     for (const cat of categories) {
       keyboard.text(
-        `${cat.icon || '📦'} ${cat.nameAr} (${cat._count.spareParts})`,
+        `${cat.icon || '📦'} ${cat.nameAr} (${cat._count.items})`,
         `sp:audit:create:category:${cat.id}`,
       ).row()
     }
@@ -3071,7 +3075,7 @@ sparePartsTransactionsHandler.callbackQuery('sp:audit:location', async (ctx) => 
       orderBy: { code: 'asc' },
       include: {
         _count: {
-          select: { spareParts: true },
+          select: { stockRecords: true },
         },
       },
     })
@@ -3080,7 +3084,7 @@ sparePartsTransactionsHandler.callbackQuery('sp:audit:location', async (ctx) => 
 
     for (const loc of locations) {
       keyboard.text(
-        `📍 ${loc.nameAr} (${loc._count.spareParts})`,
+        `📍 ${loc.nameAr} (${loc._count.stockRecords})`,
         `sp:audit:create:location:${loc.id}`,
       ).row()
     }
@@ -3206,7 +3210,7 @@ sparePartsTransactionsHandler.on('message:text', async (ctx, next) => {
     delete ctx.session.waitingForSingleAuditCode
 
     try {
-      const item = await Database.prisma.iNV_SparePart.findFirst({
+      const item = await Database.prisma.iNV_Item.findFirst({
         where: {
           code,
           isActive: true,
@@ -3260,7 +3264,7 @@ sparePartsTransactionsHandler.on('message:text', async (ctx, next) => {
     delete ctx.session.waitingForSingleAuditBarcode
 
     try {
-      const item = await Database.prisma.iNV_SparePart.findFirst({
+      const item = await Database.prisma.iNV_Item.findFirst({
         where: {
           barcode,
           isActive: true,
@@ -3314,7 +3318,7 @@ sparePartsTransactionsHandler.on('message:text', async (ctx, next) => {
     delete ctx.session.waitingForSingleAuditName
 
     try {
-      const items = await Database.prisma.iNV_SparePart.findMany({
+      const items = await Database.prisma.iNV_Item.findMany({
         where: {
           isActive: true,
           OR: [
@@ -3439,7 +3443,7 @@ sparePartsTransactionsHandler.on('message:photo', async (ctx, next) => {
       const barcode = barcodeResult.data
 
       // البحث عن الصنف بالباركود
-      const item = await Database.prisma.iNV_SparePart.findFirst({
+      const item = await Database.prisma.iNV_Item.findFirst({
         where: {
           barcode,
           isActive: true,
@@ -3642,7 +3646,7 @@ sparePartsTransactionsHandler.callbackQuery(/^sp:audit:create:category:(\d+)$/, 
     const categoryId = Number.parseInt(ctx.match![1], 10)
 
     // جلب معلومات الفئة
-    const category = await Database.prisma.iNV_EquipmentCategory.findUnique({
+    const category = await Database.prisma.equipmentCategory.findUnique({
       where: { id: categoryId },
     })
 
@@ -3775,7 +3779,7 @@ async function startAuditProcess(ctx: any, auditId: number): Promise<void> {
       where.id = audit.itemId
     }
 
-    const items = await Database.prisma.iNV_SparePart.findMany({
+    const items = await Database.prisma.iNV_Item.findMany({
       where,
       orderBy: { code: 'asc' },
     })
@@ -3814,7 +3818,7 @@ async function auditNextItem(ctx: any, auditId: number): Promise<void> {
     }
 
     const itemId = itemIds[currentIndex]
-    const item = await Database.prisma.iNV_SparePart.findUnique({
+    const item = await Database.prisma.iNV_Item.findUnique({
       where: { id: itemId },
       include: {
         category: { select: { nameAr: true, icon: true } },
@@ -4204,7 +4208,7 @@ sparePartsTransactionsHandler.callbackQuery('sp:audit:export', async (ctx) => {
 
     // جلب التفاصيل الكاملة للأصناف
     const itemIds = audit.items.map(item => item.itemId)
-    const fullItems = await Database.prisma.iNV_SparePart.findMany({
+    const fullItems = await Database.prisma.iNV_Item.findMany({
       where: { id: { in: itemIds } },
       include: {
         category: true,
@@ -4214,7 +4218,7 @@ sparePartsTransactionsHandler.callbackQuery('sp:audit:export', async (ctx) => {
 
     // جلب معلومات الفئة والموقع إذا كانت موجودة
     const category = audit.categoryId
-      ? await Database.prisma.iNV_EquipmentCategory.findUnique({
+      ? await Database.prisma.equipmentCategory.findUnique({
         where: { id: audit.categoryId },
       })
       : null
@@ -4536,7 +4540,7 @@ sparePartsTransactionsHandler.callbackQuery('sp:audit:apply', async (ctx) => {
     // تطبيق التعديلات على كل صنف
     for (const item of audit.items) {
       // الحصول على الكمية الحالية
-      const currentItem = await Database.prisma.iNV_SparePart.findUnique({
+      const currentItem = await Database.prisma.iNV_Item.findUnique({
         where: { id: item.itemId },
         select: { quantity: true },
       })
@@ -4544,15 +4548,15 @@ sparePartsTransactionsHandler.callbackQuery('sp:audit:apply', async (ctx) => {
       const quantityBefore = currentItem?.quantity || 0
 
       // تحديث الكمية
-      await Database.prisma.iNV_SparePart.update({
+      await Database.prisma.iNV_Item.update({
         where: { id: item.itemId },
         data: { quantity: item.actualQuantity },
       })
 
       // إنشاء معاملة تسوية
-      await Database.prisma.iNV_SparePartTransaction.create({
+      await Database.prisma.iNV_Transaction.create({
         data: {
-          sparePartId: item.itemId,
+          itemId: item.itemId,
           transactionType: 'ADJUST',
           quantity: Math.abs(item.difference),
           quantityBefore,
@@ -4622,13 +4626,13 @@ sparePartsTransactionsHandler.callbackQuery('sp:trans:list', async (ctx) => {
 
   try {
     // جلب آخر 10 حركات
-    const transactions = await Database.prisma.iNV_SparePartTransaction.findMany({
+    const transactions = await Database.prisma.iNV_Transaction.findMany({
       take: 10,
       orderBy: {
         createdAt: 'desc',
       },
       include: {
-        sparePart: {
+        item: {
           select: {
             nameAr: true,
             code: true,
@@ -4656,7 +4660,7 @@ sparePartsTransactionsHandler.callbackQuery('sp:trans:list', async (ctx) => {
                 : 'تسوية'
 
         message += `${typeEmoji} **${typeName}**\n`
-        message += `📦 ${trans.sparePart?.nameAr || 'غير معروف'} (${trans.sparePart?.code || '-'})\n`
+        message += `📦 ${trans.item?.nameAr || 'غير معروف'} (${trans.item?.code || '-'})\n`
         message += `🔢 الكمية: ${trans.quantity}\n`
         message += `📅 ${trans.createdAt.toLocaleDateString('ar-EG')}\n`
         if (trans.notes) {
@@ -4752,7 +4756,7 @@ sparePartsTransactionsHandler.on('message:text', async (ctx, next) => {
       await ctx.reply(
         `✅ تاريخ الشراء: ${purchaseDate.toLocaleDateString('ar-EG')}\n\n`
         + `📄 **الخطوة 3 من 13:** الكمية\n\n`
-        + `📦 **المنتج:** ${purchaseState.data.sparePartName}\n`
+        + `📦 **المنتج:** ${purchaseState.data.itemName}\n`
         + `📊 **الكمية الحالية:** ${purchaseState.data.currentQuantity}\n\n`
         + `✍️ الرجاء إرسال **كمية الشراء** (عدد صحيح):`,
         {
@@ -4943,7 +4947,7 @@ sparePartsTransactionsHandler.on('message:photo', async (ctx, next) => {
       const barcode = result.data.trim()
 
       // البحث عن القطعة بالباركود
-      const item = await Database.prisma.iNV_SparePart.findUnique({
+      const item = await Database.prisma.iNV_Item.findUnique({
         where: { barcode },
         include: {
           category: true,
@@ -4972,9 +4976,9 @@ sparePartsTransactionsHandler.on('message:photo', async (ctx, next) => {
       }
 
       // جلب آخر 10 عمليات صرف وفلترتها
-      const allIssueTransactions = await Database.prisma.iNV_SparePartTransaction.findMany({
+      const allIssueTransactions = await Database.prisma.iNV_Transaction.findMany({
         where: {
-          sparePartId: item.id,
+          itemId: item.id,
           transactionType: 'OUT',
         },
         orderBy: {
@@ -5103,7 +5107,7 @@ sparePartsTransactionsHandler.on('message:photo', async (ctx, next) => {
       const barcode = result.data.trim()
 
       // البحث عن القطعة بالباركود
-      const item = await Database.prisma.iNV_SparePart.findUnique({
+      const item = await Database.prisma.iNV_Item.findUnique({
         where: { barcode },
         include: {
           category: true,
@@ -5141,7 +5145,7 @@ sparePartsTransactionsHandler.on('message:photo', async (ctx, next) => {
       // حفظ بيانات القطعة وطلب الكمية
       ;(ctx.session as any).transferState = {
         step: 'awaiting_quantity',
-        sparePartId: item.id,
+        itemId: item.id,
         sparePartName: item.nameAr,
         sparePartCode: item.code,
         currentLocationId: item.locationId,
@@ -5223,7 +5227,7 @@ sparePartsTransactionsHandler.on('message:photo', async (ctx, next) => {
       const barcode = result.data.trim()
 
       // البحث عن القطعة بالباركود
-      const item = await Database.prisma.iNV_SparePart.findUnique({
+      const item = await Database.prisma.iNV_Item.findUnique({
         where: { barcode },
       })
 
@@ -5307,7 +5311,7 @@ sparePartsTransactionsHandler.on('message:photo', async (ctx, next) => {
       const barcode = result.data.trim()
 
       // البحث عن القطعة بالباركود
-      const item = await Database.prisma.iNV_SparePart.findUnique({
+      const item = await Database.prisma.iNV_Item.findUnique({
         where: { barcode },
       })
 
@@ -5332,7 +5336,7 @@ sparePartsTransactionsHandler.on('message:photo', async (ctx, next) => {
       }
 
       // الانتقال لبدء عملية الشراء
-      const sparePart = await Database.prisma.iNV_SparePart.findUnique({
+      const sparePart = await Database.prisma.iNV_Item.findUnique({
         where: { id: item.id },
         include: {
           category: { select: { nameAr: true } },
@@ -5350,7 +5354,7 @@ sparePartsTransactionsHandler.on('message:photo', async (ctx, next) => {
       ;(ctx.session as any).purchaseForm = {
         step: 'purchase_date',
         data: {
-          sparePartId: sparePart.id,
+          itemId: sparePart.id,
           sparePartName: sparePart.nameAr,
           categoryName: sparePart.category?.nameAr || 'غير محدد',
           locationName: sparePart.location?.nameAr || 'غير محدد',
@@ -5436,8 +5440,9 @@ sparePartsTransactionsHandler.on('message:text', async (ctx, next) => {
 
       // العودة لصفحة التأكيد
       try {
-        const originalTransaction = await Database.prisma.iNV_SparePartTransaction.findUnique({
+        const originalTransaction = await Database.prisma.iNV_Transaction.findUnique({
           where: { id: transactionId },
+          include: { recipientEmployee: true },
         })
 
         if (!originalTransaction) {
@@ -5445,15 +5450,15 @@ sparePartsTransactionsHandler.on('message:text', async (ctx, next) => {
           return
         }
 
-        const sparePart = await Database.prisma.iNV_SparePart.findUnique({
-          where: { id: originalTransaction.sparePartId },
+        const item = await Database.prisma.iNV_Item.findUnique({
+          where: { id: originalTransaction.itemId },
           include: {
             category: true,
             location: true,
           },
         })
 
-        if (!sparePart) {
+        if (!item) {
           await ctx.reply('❌ لم يتم العثور على بيانات القطعة')
           return
         }
@@ -5470,32 +5475,32 @@ sparePartsTransactionsHandler.on('message:text', async (ctx, next) => {
         })}\n`
         
         // عرض اسم المستلم إن وجد
-        if (originalTransaction.employeeName) {
-          message += `👤 **المستلم:** ${originalTransaction.employeeName}`
-          if (originalTransaction.employeeCode) {
-            message += ` (${originalTransaction.employeeCode})`
+        if (originalTransaction.recipientEmployee) {
+          message += `👤 **المستلم:** ${originalTransaction.recipientEmployee.fullName}`
+          if (originalTransaction.recipientEmployee.employeeCode) {
+            message += ` (${originalTransaction.recipientEmployee.employeeCode})`
           }
           message += `\n`
         }
         
         message += `\n━━━━━━━━━━━━━━\n\n`
         message += `📦 **معلومات القطعة:**\n\n`
-        message += `**الاسم:** ${sparePart.nameAr}\n`
-        message += `**الكود:** \`${sparePart.code}\`\n`
-        if (sparePart.barcode) {
-          message += `**الباركود:** \`${sparePart.barcode}\`\n`
+        message += `**الاسم:** ${item.nameAr}\n`
+        message += `**الكود:** \`${item.code}\`\n`
+        if (item.barcode) {
+          message += `**الباركود:** \`${item.barcode}\`\n`
         }
-        message += `**التصنيف:** ${sparePart.category?.icon} ${sparePart.category?.nameAr}\n\n`
+        message += `**التصنيف:** ${item.category?.icon} ${item.category?.nameAr}\n\n`
         message += `━━━━━━━━━━━━━━\n\n`
         message += `📊 **تفاصيل الكمية:**\n\n`
-        message += `**الكمية المصروفة الأصلية:** ${originalTransaction.quantity} ${sparePart.unit || 'قطعة'}\n`
-        message += `**الكمية المُرجعة:** ${returnQuantity} ${sparePart.unit || 'قطعة'}\n`
+        message += `**الكمية المصروفة الأصلية:** ${originalTransaction.quantity} ${item.unit || 'قطعة'}\n`
+        message += `**الكمية المُرجعة:** ${returnQuantity} ${item.unit || 'قطعة'}\n`
         if (originalTransaction.unitPrice) {
           const originalTotalValue = originalTransaction.quantity * originalTransaction.unitPrice
           const returnValue = returnQuantity * originalTransaction.unitPrice
-          message += `**سعر الوحدة:** ${originalTransaction.unitPrice} ${sparePart.currency || 'EGP'}\n`
-          message += `**القيمة الإجمالية المصروفة:** ${originalTotalValue} ${sparePart.currency || 'EGP'}\n`
-          message += `**قيمة المُرجع:** ${returnValue} ${sparePart.currency || 'EGP'}\n`
+          message += `**سعر الوحدة:** ${originalTransaction.unitPrice} ${item.currency || 'EGP'}\n`
+          message += `**القيمة الإجمالية المصروفة:** ${originalTotalValue} ${item.currency || 'EGP'}\n`
+          message += `**قيمة المُرجع:** ${returnValue} ${item.currency || 'EGP'}\n`
         }
         if (originalTransaction.notes) {
           message += `\n**ملاحظات الصرف الأصلية:** ${originalTransaction.notes}\n`
@@ -5505,7 +5510,7 @@ sparePartsTransactionsHandler.on('message:text', async (ctx, next) => {
         message += `\n📝 **ملاحظات الإرجاع:** ${notes}\n`
         
         message += `\n━━━━━━━━━━━━━━\n\n`
-        message += `⚠️ **هل تريد إرجاع ${returnQuantity} ${sparePart.unit || 'قطعة'} للمخزن؟**`
+        message += `⚠️ **هل تريد إرجاع ${returnQuantity} ${item.unit || 'قطعة'} للمخزن؟**`
 
         const keyboard = new InlineKeyboard()
           .text('✅ تأكيد الإرجاع', `sp:trans:return:execute:${transactionId}:${returnQuantity}`)
@@ -5545,7 +5550,7 @@ sparePartsTransactionsHandler.on('message:text', async (ctx, next) => {
       }
 
       // جلب عملية الصرف الأصلية للتحقق من الحد الأقصى
-      const originalTransaction = await Database.prisma.iNV_SparePartTransaction.findUnique({
+      const originalTransaction = await Database.prisma.iNV_Transaction.findUnique({
         where: { id: returnState.transactionId },
       })
 
@@ -5556,7 +5561,7 @@ sparePartsTransactionsHandler.on('message:text', async (ctx, next) => {
       }
 
       // حساب الكمية المتاحة للإرجاع
-      const returnedQuantity = await Database.prisma.iNV_SparePartTransaction.aggregate({
+      const returnedQuantity = await Database.prisma.iNV_Transaction.aggregate({
         where: {
           transactionType: 'RETURN',
           notes: {
@@ -5595,8 +5600,8 @@ sparePartsTransactionsHandler.on('message:text', async (ctx, next) => {
       ;(ctx.session as any).returnState = undefined
 
       // استدعاء معالج التأكيد مباشرة
-      const sparePart = await Database.prisma.iNV_SparePart.findUnique({
-        where: { id: originalTransaction.sparePartId },
+      const sparePart = await Database.prisma.iNV_Item.findUnique({
+        where: { id: originalTransaction.itemId },
         include: {
           category: true,
           location: true,
@@ -5660,7 +5665,7 @@ sparePartsTransactionsHandler.on('message:text', async (ctx, next) => {
     if (returnState.searchMode === 'search_by_barcode') {
       const barcode = text.trim()
 
-      const item = await Database.prisma.iNV_SparePart.findUnique({
+      const item = await Database.prisma.iNV_Item.findUnique({
         where: { barcode },
         include: {
           category: true,
@@ -5690,9 +5695,9 @@ sparePartsTransactionsHandler.on('message:text', async (ctx, next) => {
       ;(ctx.session as any).returnState = undefined
 
       // جلب آخر 5 عمليات صرف
-      const allIssueTransactions = await Database.prisma.iNV_SparePartTransaction.findMany({
+      const allIssueTransactions = await Database.prisma.iNV_Transaction.findMany({
         where: {
-          sparePartId: item.id,
+          itemId: item.id,
           transactionType: 'OUT',
         },
         orderBy: {
@@ -5768,7 +5773,7 @@ sparePartsTransactionsHandler.on('message:text', async (ctx, next) => {
     if (returnState.searchMode === 'search_by_code') {
       const code = text.trim().toUpperCase()
 
-      const item = await Database.prisma.iNV_SparePart.findUnique({
+      const item = await Database.prisma.iNV_Item.findUnique({
         where: { code },
         include: {
           category: true,
@@ -5798,9 +5803,9 @@ sparePartsTransactionsHandler.on('message:text', async (ctx, next) => {
       ;(ctx.session as any).returnState = undefined
 
       // جلب آخر 10 عمليات صرف وفلترتها
-      const allIssueTransactions = await Database.prisma.iNV_SparePartTransaction.findMany({
+      const allIssueTransactions = await Database.prisma.iNV_Transaction.findMany({
         where: {
-          sparePartId: item.id,
+          itemId: item.id,
           transactionType: 'OUT',
         },
         orderBy: {
@@ -5876,7 +5881,7 @@ sparePartsTransactionsHandler.on('message:text', async (ctx, next) => {
     if (returnState.searchMode === 'search_by_name') {
       const searchTerm = text.trim()
 
-      const items = await Database.prisma.iNV_SparePart.findMany({
+      const items = await Database.prisma.iNV_Item.findMany({
         where: {
           OR: [{ nameAr: { contains: searchTerm } }, { nameEn: { contains: searchTerm } }],
         },
@@ -5912,9 +5917,9 @@ sparePartsTransactionsHandler.on('message:text', async (ctx, next) => {
         ;(ctx.session as any).returnState = undefined
 
         // جلب آخر 5 عمليات صرف
-        const issueTransactions = await Database.prisma.iNV_SparePartTransaction.findMany({
+        const issueTransactions = await Database.prisma.iNV_Transaction.findMany({
           where: {
-            sparePartId: item.id,
+            itemId: item.id,
             transactionType: 'OUT',
           },
           orderBy: {
@@ -6024,7 +6029,7 @@ sparePartsTransactionsHandler.on('message:text', async (ctx, next) => {
     if (transferState.searchMode === 'search_by_barcode') {
       const barcode = text.trim()
 
-      const item = await Database.prisma.iNV_SparePart.findUnique({
+      const item = await Database.prisma.iNV_Item.findUnique({
         where: { barcode },
         include: {
           category: true,
@@ -6060,7 +6065,7 @@ sparePartsTransactionsHandler.on('message:text', async (ctx, next) => {
       // حفظ البيانات وطلب الكمية
       ;(ctx.session as any).transferState = {
         step: 'awaiting_quantity',
-        sparePartId: item.id,
+        itemId: item.id,
         sparePartName: item.nameAr,
         sparePartCode: item.code,
         currentLocationId: item.locationId,
@@ -6090,7 +6095,7 @@ sparePartsTransactionsHandler.on('message:text', async (ctx, next) => {
     if (transferState.searchMode === 'search_by_code') {
       const code = text.trim().toUpperCase()
 
-      const item = await Database.prisma.iNV_SparePart.findUnique({
+      const item = await Database.prisma.iNV_Item.findUnique({
         where: { code },
         include: {
           category: true,
@@ -6126,7 +6131,7 @@ sparePartsTransactionsHandler.on('message:text', async (ctx, next) => {
       // حفظ البيانات وطلب الكمية
       ;(ctx.session as any).transferState = {
         step: 'awaiting_quantity',
-        sparePartId: item.id,
+        itemId: item.id,
         sparePartName: item.nameAr,
         sparePartCode: item.code,
         currentLocationId: item.locationId,
@@ -6156,7 +6161,7 @@ sparePartsTransactionsHandler.on('message:text', async (ctx, next) => {
     if (transferState.searchMode === 'search_by_name') {
       const searchTerm = text.trim()
 
-      const items = await Database.prisma.iNV_SparePart.findMany({
+      const items = await Database.prisma.iNV_Item.findMany({
         where: {
           OR: [{ nameAr: { contains: searchTerm } }, { nameEn: { contains: searchTerm } }],
         },
@@ -6203,7 +6208,7 @@ sparePartsTransactionsHandler.on('message:text', async (ctx, next) => {
 
         ;(ctx.session as any).transferState = {
           step: 'awaiting_quantity',
-          sparePartId: item.id,
+          itemId: item.id,
           sparePartName: item.nameAr,
           sparePartCode: item.code,
           currentLocationId: item.locationId,
@@ -6306,7 +6311,7 @@ sparePartsTransactionsHandler.on('message:text', async (ctx, next) => {
       }
 
       let message = `✅ **تم تحديد الكمية: ${quantity}**\n\n`
-      message += `📦 **${transferState.sparePartName}**\n`
+      message += `📦 **${transferState.itemName}**\n`
       message += `📍 **من:** ${transferState.currentLocationName}\n\n`
       message += `━━━━━━━━━━━━━━\n\n`
       message += `📍 **اختر الموقع الجديد:**`
@@ -6335,7 +6340,7 @@ sparePartsTransactionsHandler.on('message:text', async (ctx, next) => {
     if (purchaseState.step === 'search_by_barcode') {
       const barcode = text.trim()
 
-      const item = await Database.prisma.iNV_SparePart.findUnique({
+      const item = await Database.prisma.iNV_Item.findUnique({
         where: { barcode },
       })
 
@@ -6358,7 +6363,7 @@ sparePartsTransactionsHandler.on('message:text', async (ctx, next) => {
       }
 
       // بدء تدفق الشراء
-      const sparePart = await Database.prisma.iNV_SparePart.findUnique({
+      const sparePart = await Database.prisma.iNV_Item.findUnique({
         where: { id: item.id },
         include: {
           category: { select: { nameAr: true } },
@@ -6375,7 +6380,7 @@ sparePartsTransactionsHandler.on('message:text', async (ctx, next) => {
       ;(ctx.session as any).purchaseForm = {
         step: 'purchase_date',
         data: {
-          sparePartId: sparePart.id,
+          itemId: sparePart.id,
           sparePartName: sparePart.nameAr,
           categoryName: sparePart.category?.nameAr || 'غير محدد',
           locationName: sparePart.location?.nameAr || 'غير محدد',
@@ -6410,7 +6415,7 @@ sparePartsTransactionsHandler.on('message:text', async (ctx, next) => {
     if (purchaseState.step === 'search_by_code') {
       const code = text.trim().toUpperCase()
 
-      const item = await Database.prisma.iNV_SparePart.findUnique({
+      const item = await Database.prisma.iNV_Item.findUnique({
         where: { code },
       })
 
@@ -6433,7 +6438,7 @@ sparePartsTransactionsHandler.on('message:text', async (ctx, next) => {
       }
 
       // بدء تدفق الشراء
-      const sparePart = await Database.prisma.iNV_SparePart.findUnique({
+      const sparePart = await Database.prisma.iNV_Item.findUnique({
         where: { id: item.id },
         include: {
           category: { select: { nameAr: true } },
@@ -6450,7 +6455,7 @@ sparePartsTransactionsHandler.on('message:text', async (ctx, next) => {
       ;(ctx.session as any).purchaseForm = {
         step: 'purchase_date',
         data: {
-          sparePartId: sparePart.id,
+          itemId: sparePart.id,
           sparePartName: sparePart.nameAr,
           categoryName: sparePart.category?.nameAr || 'غير محدد',
           locationName: sparePart.location?.nameAr || 'غير محدد',
@@ -6485,7 +6490,7 @@ sparePartsTransactionsHandler.on('message:text', async (ctx, next) => {
     if (purchaseState.step === 'search_by_name') {
       const searchTerm = text.trim()
 
-      const items = await Database.prisma.iNV_SparePart.findMany({
+      const items = await Database.prisma.iNV_Item.findMany({
         where: {
           isActive: true,
           OR: [
@@ -6519,7 +6524,7 @@ sparePartsTransactionsHandler.on('message:text', async (ctx, next) => {
 
       // إذا كانت نتيجة واحدة فقط
       if (items.length === 1) {
-        const sparePart = await Database.prisma.iNV_SparePart.findUnique({
+        const sparePart = await Database.prisma.iNV_Item.findUnique({
           where: { id: items[0].id },
           include: {
             category: { select: { nameAr: true } },
@@ -6536,7 +6541,7 @@ sparePartsTransactionsHandler.on('message:text', async (ctx, next) => {
         ;(ctx.session as any).purchaseForm = {
           step: 'purchase_date',
           data: {
-            sparePartId: sparePart.id,
+            itemId: sparePart.id,
             sparePartName: sparePart.nameAr,
             categoryName: sparePart.category?.nameAr || 'غير محدد',
             locationName: sparePart.location?.nameAr || 'غير محدد',
@@ -6603,7 +6608,7 @@ sparePartsTransactionsHandler.on('message:text', async (ctx, next) => {
     if (issueState.step === 'search_by_barcode') {
       const barcode = text.trim()
 
-      const item = await Database.prisma.iNV_SparePart.findUnique({
+      const item = await Database.prisma.iNV_Item.findUnique({
         where: { barcode },
       })
 
@@ -6634,7 +6639,7 @@ sparePartsTransactionsHandler.on('message:text', async (ctx, next) => {
     if (issueState.step === 'search_by_code') {
       const code = text.trim().toUpperCase()
 
-      const item = await Database.prisma.iNV_SparePart.findUnique({
+      const item = await Database.prisma.iNV_Item.findUnique({
         where: { code },
       })
 
@@ -6665,7 +6670,7 @@ sparePartsTransactionsHandler.on('message:text', async (ctx, next) => {
     if (issueState.step === 'search_by_name') {
       const searchTerm = text.trim()
 
-      const items = await Database.prisma.iNV_SparePart.findMany({
+      const items = await Database.prisma.iNV_Item.findMany({
         where: {
           isActive: true,
           OR: [
@@ -7037,8 +7042,8 @@ async function showIssueReview(ctx: any) {
   }
 
   let message = '🔍 **مراجعة عملية الصرف**\n\n'
-  message += `📦 **القطعة:** ${data.sparePartName}\n`
-  message += `🔤 **الكود:** \`${data.sparePartCode}\`\n\n`
+  message += `📦 **القطعة:** ${data.itemName}\n`
+  message += `🔤 **الكود:** \`${data.itemCode}\`\n\n`
   message += `━━━━━━━━━━━━━━\n\n`
   message += `� **الحالة:** ${data.selectedConditionIcon} ${data.selectedConditionNameAr}\n`
   message += `📊 **الكمية قبل:** ${data.availableQuantity}\n`
@@ -7105,8 +7110,8 @@ sparePartsTransactionsHandler.callbackQuery('sp:trans:out:confirm', async (ctx) 
 
   try {
     // جلب بيانات القطعة الكاملة مع العلاقات
-    const sparePart = await Database.prisma.iNV_SparePart.findUnique({
-      where: { id: data.sparePartId },
+    const sparePart = await Database.prisma.iNV_Item.findUnique({
+      where: { id: data.itemId },
       include: {
         category: {
           select: {
@@ -7139,10 +7144,10 @@ sparePartsTransactionsHandler.callbackQuery('sp:trans:out:confirm', async (ctx) 
     const transactionNumber = `OUT-${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}-${Date.now().toString().slice(-6)}`
 
     // إنشاء سجل الحركة
-    const transaction = await Database.prisma.iNV_SparePartTransaction.create({
+    const transaction = await Database.prisma.iNV_Transaction.create({
       data: {
         transactionNumber,
-        sparePartId: data.sparePartId,
+        itemId: data.itemId,
         transactionType: 'OUT',
         quantity: data.quantity,
         quantityBefore,
@@ -7153,7 +7158,7 @@ sparePartsTransactionsHandler.callbackQuery('sp:trans:out:confirm', async (ctx) 
         createdBy: BigInt(ctx.from?.id || 0),
         equipmentId: data.equipmentId || null,
         projectId: data.projectId || null,
-        employeeId: data.employeeId || null,
+        recipientEmployeeId: data.employeeId || null,
         toLocationId: data.toLocationId || null,
       },
     })
@@ -7179,8 +7184,8 @@ sparePartsTransactionsHandler.callbackQuery('sp:trans:out:confirm', async (ctx) 
         break
     }
 
-    await Database.prisma.iNV_SparePart.update({
-      where: { id: data.sparePartId },
+    await Database.prisma.iNV_Item.update({
+      where: { id: data.itemId },
       data: quantityUpdates,
     })
 
@@ -7216,7 +7221,7 @@ sparePartsTransactionsHandler.on('message:text', async (ctx, next) => {
 
     try {
       // Get item details first
-      const item = await Database.prisma.iNV_SparePart.findUnique({ where: { id: itemId } })
+      const item = await Database.prisma.iNV_Item.findUnique({ where: { id: itemId } })
       if (!item) {
         await ctx.reply('❌ القطعة غير موجودة')
         ;(ctx.session as any).transactionForm = undefined
@@ -7237,10 +7242,10 @@ sparePartsTransactionsHandler.on('message:text', async (ctx, next) => {
       const transactionNumber = `${transactionType}-${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}-${Date.now().toString().slice(-6)}`
 
       // Create transaction record
-      await Database.prisma.iNV_SparePartTransaction.create({
+      await Database.prisma.iNV_Transaction.create({
         data: {
           transactionNumber,
-          sparePartId: itemId,
+          itemId: itemId,
           transactionType,
           quantity: qty,
           quantityBefore,
@@ -7251,7 +7256,7 @@ sparePartsTransactionsHandler.on('message:text', async (ctx, next) => {
       })
 
       // Update spare part quantity and total value
-      await Database.prisma.iNV_SparePart.update({
+      await Database.prisma.iNV_Item.update({
         where: { id: itemId },
         data: {
           quantity: newQty,
@@ -7332,7 +7337,7 @@ sparePartsTransactionsHandler.callbackQuery('sp:trans:in:use_today', async (ctx)
 
   await ctx.editMessageText(
     `📄 **الخطوة 3 من 13:** الكمية\n\n`
-    + `📦 **المنتج:** ${state.data.sparePartName}\n`
+    + `📦 **المنتج:** ${state.data.itemName}\n`
     + `📊 **الكمية الحالية:** ${state.data.currentQuantity}\n\n`
     + `✍️ الرجاء إرسال **كمية الشراء** (عدد صحيح):`,
     {
@@ -7559,8 +7564,8 @@ async function showPurchaseReview(ctx: Context, state: any) {
 
   let message = '📋 **مراجعة بيانات الشراء**\n\n'
   message += `━━━━━━━━━━━━━━\n`
-  message += `📦 **المنتج:** ${data.sparePartName}\n`
-  message += `🔤 **الكود:** \`${data.sparePartCode}\`\n\n`
+  message += `📦 **المنتج:** ${data.itemName}\n`
+  message += `🔤 **الكود:** \`${data.itemCode}\`\n\n`
 
   if (data.invoiceNumber) {
     message += `📄 **رقم الفاتورة:** ${data.invoiceNumber}\n`
@@ -7622,8 +7627,8 @@ sparePartsTransactionsHandler.callbackQuery('sp:trans:in:confirm', async (ctx) =
 
   try {
     // جلب بيانات المنتج
-    const sparePart = await Database.prisma.iNV_SparePart.findUnique({
-      where: { id: data.sparePartId },
+    const sparePart = await Database.prisma.iNV_Item.findUnique({
+      where: { id: data.itemId },
     })
 
     if (!sparePart) {
@@ -7640,10 +7645,10 @@ sparePartsTransactionsHandler.callbackQuery('sp:trans:in:confirm', async (ctx) =
     const transactionNumber = `IN-${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}-${Date.now().toString().slice(-6)}`
 
     // إنشاء سجل الحركة مع كل البيانات
-    const transaction = await Database.prisma.iNV_SparePartTransaction.create({
+    const transaction = await Database.prisma.iNV_Transaction.create({
       data: {
         transactionNumber,
-        sparePartId: data.sparePartId,
+        itemId: data.itemId,
         transactionType: 'IN',
         quantity: data.quantity,
         quantityBefore,
@@ -7651,7 +7656,6 @@ sparePartsTransactionsHandler.callbackQuery('sp:trans:in:confirm', async (ctx) =
         invoiceNumber: data.invoiceNumber,
         supplierName: data.supplierName,
         unitPrice: data.unitPrice,
-        totalCost: data.totalCost,
         notes: data.notes,
         reason: `شراء - ${data.condition}`,
         attachments: data.invoicePhoto ? { invoicePhoto: data.invoicePhoto } : undefined,
@@ -7695,8 +7699,8 @@ sparePartsTransactionsHandler.callbackQuery('sp:trans:in:confirm', async (ctx) =
     }
 
     // تحديث كمية المنتج والسعر
-    await Database.prisma.iNV_SparePart.update({
-      where: { id: data.sparePartId },
+    await Database.prisma.iNV_Item.update({
+      where: { id: data.itemId },
       data: quantityUpdates,
     })
 
@@ -7712,8 +7716,8 @@ sparePartsTransactionsHandler.callbackQuery('sp:trans:in:confirm', async (ctx) =
     }
 
     let successMessage = `✅ **تم إتمام الشراء بنجاح!**\n\n`
-    successMessage += `📦 **المنتج:** ${data.sparePartName}\n`
-    successMessage += `🔤 **الكود:** \`${data.sparePartCode}\`\n`
+    successMessage += `📦 **المنتج:** ${data.itemName}\n`
+    successMessage += `🔤 **الكود:** \`${data.itemCode}\`\n`
     successMessage += `🔢 **رقم الحركة:** \`${transactionNumber}\`\n\n`
     successMessage += `━━━━━━━━━━━━━━\n\n`
     successMessage += `📊 **الكمية قبل:** ${quantityBefore}\n`
@@ -7745,7 +7749,7 @@ sparePartsTransactionsHandler.callbackQuery('sp:trans:in:confirm', async (ctx) =
 })
 
 // دالة إرسال إشعار للمشرفين
-async function sendPurchaseNotificationToAdmins(ctx: Context, transaction: any, sparePart: any, data: any) {
+async function sendPurchaseNotificationToAdmins(ctx: Context, transaction: any, item: any, data: any) {
   try {
     const departmentConfig = await Database.prisma.departmentConfig.findUnique({
       where: { code: 'inventory-management' },
@@ -7777,8 +7781,8 @@ async function sendPurchaseNotificationToAdmins(ctx: Context, transaction: any, 
     }
 
     let adminMessage = `🔔 **إشعار شراء جديد - مخزن قطع الغيار**\n\n`
-    adminMessage += `📦 **المنتج:** ${sparePart.nameAr}\n`
-    adminMessage += `🔤 **الكود:** \`${sparePart.code}\`\n`
+    adminMessage += `📦 **المنتج:** ${item.nameAr}\n`
+    adminMessage += `🔤 **الكود:** \`${item.code}\`\n`
     adminMessage += `🔢 **رقم الحركة:** \`${transaction.transactionNumber}\`\n\n`
     adminMessage += `━━━━━━━━━━━━━━\n\n`
     adminMessage += `📊 **الكمية قبل:** ${transaction.quantityBefore}\n`
@@ -8210,7 +8214,7 @@ async function sendIssueReportToAdmins(
   ctx: any,
   transactionId: number,
   data: any,
-  sparePart: any,
+  item: any,
   transactionNumber: string,
 ) {
   try {
@@ -8315,8 +8319,8 @@ async function sendIssueReportToAdmins(
     }
 
     // جلب معلومات الموقع الحالي والفئة من البيانات المضمنة
-    const category = sparePart.category
-    const location = sparePart.location
+    const category = item.category
+    const location = item.location
 
     // تحديد نوع الصرف بالعربية
     const issueTypeMap: Record<string, string> = {
@@ -8360,13 +8364,13 @@ async function sendIssueReportToAdmins(
 
     // معلومات القطعة
     report += `📦 **بيانات قطعة الغيار:**\n\n`
-    report += `   🏷️ **الاسم العربي:** ${sparePart.nameAr}\n`
-    if (sparePart.nameEn) {
-      report += `   🏷️ **الاسم الإنجليزي:** ${sparePart.nameEn}\n`
+    report += `   🏷️ **الاسم العربي:** ${item.nameAr}\n`
+    if (item.nameEn) {
+      report += `   🏷️ **الاسم الإنجليزي:** ${item.nameEn}\n`
     }
-    report += `   🔤 **الكود:** \`${sparePart.code}\`\n`
-    if (sparePart.barcode) {
-      report += `   📸 **الباركود:** \`${sparePart.barcode}\`\n`
+    report += `   🔤 **الكود:** \`${item.code}\`\n`
+    if (item.barcode) {
+      report += `   📸 **الباركود:** \`${item.barcode}\`\n`
     }
     if (category) {
       report += `   📂 **الفئة:** ${category.nameAr} (\`${category.code}\`)\n`
@@ -8374,26 +8378,26 @@ async function sendIssueReportToAdmins(
     if (location) {
       report += `   📍 **موقع التخزين:** ${location.nameAr}\n`
     }
-    if (sparePart.description) {
-      report += `   📝 **الوصف:** ${sparePart.description}\n`
+    if (item.description) {
+      report += `   📝 **الوصف:** ${item.description}\n`
     }
-    if (sparePart.manufacturer) {
-      report += `   🏭 **الشركة المصنعة:** ${sparePart.manufacturer}\n`
+    if (item.manufacturer) {
+      report += `   🏭 **الشركة المصنعة:** ${item.manufacturer}\n`
     }
-    if (sparePart.partNumber) {
-      report += `   #️⃣ **رقم الجزء:** ${sparePart.partNumber}\n`
+    if (item.partNumber) {
+      report += `   #️⃣ **رقم الجزء:** ${item.partNumber}\n`
     }
-    if (sparePart.model) {
-      report += `   🔧 **الموديل:** ${sparePart.model}\n`
+    if (item.model) {
+      report += `   🔧 **الموديل:** ${item.model}\n`
     }
-    if (sparePart.unit) {
-      report += `   📏 **الوحدة:** ${sparePart.unit}\n`
+    if (item.unit) {
+      report += `   📏 **الوحدة:** ${item.unit}\n`
     }
-    if (sparePart.unitPrice && sparePart.unitPrice > 0) {
-      report += `   💰 **سعر الوحدة:** ${sparePart.unitPrice.toFixed(2)} جنيه\n`
+    if (item.unitPrice && item.unitPrice > 0) {
+      report += `   💰 **سعر الوحدة:** ${item.unitPrice.toFixed(2)} جنيه\n`
     }
-    if (sparePart.supplierName) {
-      report += `   🏪 **المورد:** ${sparePart.supplierName}\n`
+    if (item.supplierName) {
+      report += `   🏪 **المورد:** ${item.supplierName}\n`
     }
 
     report += `\n━━━━━━━━━━━━\n\n`
@@ -8401,14 +8405,14 @@ async function sendIssueReportToAdmins(
     // معلومات الصرف
     report += `🎯 **تفاصيل عملية الصرف:**\n\n`
     report += `   ${conditionInfo.icon} **حالة القطعة:** ${conditionInfo.nameAr}\n`
-    report += `   📊 **الكمية قبل الصرف:** ${data.availableQuantity} ${sparePart.unit || 'قطعة'}\n`
-    report += `   ➖ **الكمية المصروفة:** ${data.quantity} ${sparePart.unit || 'قطعة'}\n`
-    report += `   📈 **الكمية المتبقية:** ${data.availableQuantity - data.quantity} ${sparePart.unit || 'قطعة'}\n`
+    report += `   📊 **الكمية قبل الصرف:** ${data.availableQuantity} ${item.unit || 'قطعة'}\n`
+    report += `   ➖ **الكمية المصروفة:** ${data.quantity} ${item.unit || 'قطعة'}\n`
+    report += `   📈 **الكمية المتبقية:** ${data.availableQuantity - data.quantity} ${item.unit || 'قطعة'}\n`
     report += `   🎯 **نوع الصرف:** ${issueTypeMap[data.issueType] || data.issueType}\n`
 
     // إضافة القيمة المالية للصرف إذا كان السعر متوفراً
-    if (sparePart.unitPrice && sparePart.unitPrice > 0) {
-      const totalValue = sparePart.unitPrice * data.quantity
+    if (item.unitPrice && item.unitPrice > 0) {
+      const totalValue = item.unitPrice * data.quantity
       report += `   💵 **قيمة الصرف:** ${totalValue.toFixed(2)} جنيه\n`
     }
 
@@ -8450,20 +8454,20 @@ async function sendIssueReportToAdmins(
 
     // معلومات الكميات التفصيلية
     report += `📊 **توزيع المخزون الحالي:**\n\n`
-    report += `   🆕 جديد: ${sparePart.quantityNew || 0} ${sparePart.unit || 'قطعة'}\n`
-    report += `   ♻️ مستعمل: ${sparePart.quantityUsed || 0} ${sparePart.unit || 'قطعة'}\n`
-    report += `   🔄 مجدد: ${sparePart.quantityRefurbished || 0} ${sparePart.unit || 'قطعة'}\n`
-    report += `   📦 استيراد: ${sparePart.quantityImport || 0} ${sparePart.unit || 'قطعة'}\n\n`
-    report += `   📦 **الإجمالي الحالي:** ${sparePart.quantity || 0} ${sparePart.unit || 'قطعة'}\n`
+    report += `   🆕 جديد: ${item.quantityNew || 0} ${item.unit || 'قطعة'}\n`
+    report += `   ♻️ مستعمل: ${item.quantityUsed || 0} ${item.unit || 'قطعة'}\n`
+    report += `   🔄 مجدد: ${item.quantityRefurbished || 0} ${item.unit || 'قطعة'}\n`
+    report += `   📦 استيراد: ${item.quantityImport || 0} ${item.unit || 'قطعة'}\n\n`
+    report += `   📦 **الإجمالي الحالي:** ${item.quantity || 0} ${item.unit || 'قطعة'}\n`
 
     // إضافة تنبيه إذا كانت الكمية أقل من الحد الأدنى
-    if (sparePart.minQuantity && sparePart.quantity < sparePart.minQuantity) {
-      report += `\n   ⚠️ **تنبيه:** الكمية أقل من الحد الأدنى (${sparePart.minQuantity})\n`
+    if (item.minQuantity && item.quantity < item.minQuantity) {
+      report += `\n   ⚠️ **تنبيه:** الكمية أقل من الحد الأدنى (${item.minQuantity})\n`
     }
 
     // إضافة معلومات القيمة الإجمالية
-    if (sparePart.totalValue && sparePart.totalValue > 0) {
-      report += `   💰 **القيمة الإجمالية للمخزون:** ${sparePart.totalValue.toFixed(2)} جنيه\n`
+    if (item.totalValue && item.totalValue > 0) {
+      report += `   💰 **القيمة الإجمالية للمخزون:** ${item.totalValue.toFixed(2)} جنيه\n`
     }
 
     report += `\n═════════\n`

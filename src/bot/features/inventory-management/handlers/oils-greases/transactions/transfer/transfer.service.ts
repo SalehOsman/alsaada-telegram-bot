@@ -7,14 +7,14 @@ export class TransferService {
   static async getItems(page: number = 1, limit: number = 8) {
     const skip = (page - 1) * limit
     const [items, total] = await Promise.all([
-      Database.prisma.iNV_OilsGreasesItem.findMany({
+      Database.prisma.iNV_Item.findMany({
         where: { isActive: true, status: 'AVAILABLE' },
         include: { category: true, location: true },
         orderBy: { nameAr: 'asc' },
         skip,
         take: limit,
       }),
-      Database.prisma.iNV_OilsGreasesItem.count({ where: { isActive: true, status: 'AVAILABLE' } }),
+      Database.prisma.iNV_Item.count({ where: { isActive: true, status: 'AVAILABLE' } }),
     ])
     return {
       items,
@@ -28,7 +28,7 @@ export class TransferService {
   }
 
   static async searchItems(query: string) {
-    return Database.prisma.iNV_OilsGreasesItem.findMany({
+    return Database.prisma.iNV_Item.findMany({
       where: {
         isActive: true,
         status: 'AVAILABLE',

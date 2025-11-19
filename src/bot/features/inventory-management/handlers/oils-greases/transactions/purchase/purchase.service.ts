@@ -3,6 +3,7 @@ import {
   InventoryItemsService,
   CategoryService
 } from '#root/modules/services/inventory/index.js'
+import { Database } from '#root/modules/database/index.js'
 
 export class PurchaseService {
   /**
@@ -17,8 +18,22 @@ export class PurchaseService {
     notes?: string
     userId: number
   }) {
+    // Get item to fetch default locationId
+    const item = await Database.prisma.iNV_Item.findUnique({
+      where: { id: data.itemId },
+      select: { locationId: true }
+    })
+    
+    if (!item) {
+      throw new Error('❌ الصنف غير موجود')
+    }
+    
+    // Use item's default locationId or a fallback (location 1)
+    const locationId = item.locationId || 1
+    
     return await OilsGreasesPurchaseService.executePurchase({
       itemId: data.itemId,
+      locationId,
       quantity: data.quantity,
       price: data.unitPrice,
       invoiceNumber: data.invoiceNumber,

@@ -19,7 +19,7 @@ sparePartsReportsHandler.callbackQuery('sp:reports:summary', async (ctx) => {
 
   try {
     // جلب إحصائيات المخزون
-    const stats = await Database.prisma.iNV_SparePart.aggregate({
+    const stats = await Database.prisma.iNV_Item.aggregate({
       _count: { id: true },
       _sum: {
         quantity: true,
@@ -28,10 +28,10 @@ sparePartsReportsHandler.callbackQuery('sp:reports:summary', async (ctx) => {
     })
 
     // جلب عدد القطع المنخفضة
-    const lowStockCount = await Database.prisma.iNV_SparePart.count({
+    const lowStockCount = await Database.prisma.iNV_Item.count({
       where: {
         quantity: {
-          lte: Database.prisma.iNV_SparePart.fields.minQuantity,
+          lte: Database.prisma.iNV_Item.fields.minQuantity,
         },
       },
     })
@@ -43,7 +43,7 @@ sparePartsReportsHandler.callbackQuery('sp:reports:summary', async (ctx) => {
     message += `⚠️ **قطع منخفضة:** ${lowStockCount} صنف\n\n`
 
     // جلب أعلى 5 قطع قيمة
-    const topValue = await Database.prisma.iNV_SparePart.findMany({
+    const topValue = await Database.prisma.iNV_Item.findMany({
       take: 5,
       orderBy: {
         totalValue: 'desc',
@@ -94,12 +94,12 @@ sparePartsReportsHandler.callbackQuery('sp:reports:alerts', async (ctx) => {
 
   try {
     // جلب القطع المنخفضة والمنتهية
-    const lowStock = await Database.prisma.iNV_SparePart.findMany({
+    const lowStock = await Database.prisma.iNV_Item.findMany({
       where: {
         OR: [
           {
             quantity: {
-              lte: Database.prisma.iNV_SparePart.fields.minQuantity,
+              lte: Database.prisma.iNV_Item.fields.minQuantity,
             },
           },
           {
@@ -194,21 +194,22 @@ sparePartsReportsHandler.callbackQuery('sp:reports:value', async (ctx) => {
 
   try {
     // إجمالي قيمة المخزون
-    const totalValue = await Database.prisma.iNV_SparePart.aggregate({
+    const totalValue = await Database.prisma.iNV_Item.aggregate({
       _sum: {
         totalValue: true,
       },
     })
 
     // قيمة حسب التصنيف
-    const byCategory = await Database.prisma.iNV_EquipmentCategory.findMany({
+    const byCategory = await Database.prisma.iNV_Category.findMany({
+      where: { isActive: true },
       include: {
         _count: {
           select: {
-            spareParts: true,
+            items: true,
           },
         },
-        spareParts: {
+        items: {
           select: {
             totalValue: true,
           },
@@ -226,14 +227,14 @@ sparePartsReportsHandler.callbackQuery('sp:reports:value', async (ctx) => {
       message += '📋 **التوزيع حسب التصنيف:**\n\n'
 
       for (const cat of byCategory) {
-        const catValue = cat.spareParts.reduce((sum: number, item: { totalValue: number }) => sum + Number(item.totalValue), 0)
+        const catValue = cat.items.reduce((sum: number, item: { totalValue: number }) => sum + Number(item.totalValue), 0)
         const percentage = totalValue._sum.totalValue
           ? ((catValue / Number(totalValue._sum.totalValue)) * 100).toFixed(1)
           : '0.0'
 
-        message += `${cat.icon} **${cat.nameAr}**\n`
+        message += `${cat.icon || '📦'} **${cat.nameAr}**\n`
         message += `  القيمة: ${catValue.toFixed(2)} ج (${percentage}%)\n`
-        message += `  الأصناف: ${cat._count.spareParts}\n\n`
+        message += `  الأصناف: ${cat._count.items}\n\n`
       }
     }
 
@@ -296,11 +297,12 @@ sparePartsReportsHandler.callbackQuery('sp:reports:category', async (ctx) => {
   await ctx.answerCallbackQuery()
 
   try {
-    const categories = await Database.prisma.iNV_EquipmentCategory.findMany({
+    const categories = await Database.prisma.iNV_Category.findMany({
+      where: { isActive: true },
       include: {
         _count: {
           select: {
-            spareParts: true,
+            items: true,
           },
         },
       },
@@ -313,7 +315,7 @@ sparePartsReportsHandler.callbackQuery('sp:reports:category', async (ctx) => {
 
     for (const cat of categories) {
       keyboard.text(
-        `${cat.icon} ${cat.nameAr} (${cat._count.spareParts})`,
+        `${cat.icon || '📦'} ${cat.nameAr} (${cat._count.items})`,
         `sp:reports:category:${cat.id}`,
       ).row()
     }
@@ -347,7 +349,7 @@ sparePartsReportsHandler.callbackQuery(/^sp:reports:category:(\d+)$/, async (ctx
   const categoryId = Number.parseInt(ctx.match![1], 10)
 
   try {
-    const items = await Database.prisma.iNV_SparePart.findMany({
+    const items = await Database.prisma.iNV_Item.findMany({
       where: { categoryId },
       orderBy: { code: 'asc' },
       take: 50,
@@ -383,10 +385,11 @@ sparePartsReportsHandler.callbackQuery('sp:reports:location', async (ctx) => {
 
   try {
     const locations = await Database.prisma.iNV_StorageLocation.findMany({
+      where: { isActive: true },
       include: {
         _count: {
           select: {
-            spareParts: true,
+            stockRecords: true,
           },
         },
       },
@@ -399,7 +402,7 @@ sparePartsReportsHandler.callbackQuery('sp:reports:location', async (ctx) => {
 
     for (const loc of locations) {
       keyboard.text(
-        `📍 ${loc.nameAr} (${loc._count.spareParts})`,
+        `📍 ${loc.nameAr} (${loc._count.stockRecords})`,
         `sp:reports:location:${loc.id}`,
       ).row()
     }
@@ -433,7 +436,7 @@ sparePartsReportsHandler.callbackQuery(/^sp:reports:location:(\d+)$/, async (ctx
   const locationId = Number.parseInt(ctx.match![1], 10)
 
   try {
-    const items = await Database.prisma.iNV_SparePart.findMany({
+    const items = await Database.prisma.iNV_Item.findMany({
       where: { locationId },
       orderBy: { code: 'asc' },
       take: 50,
@@ -514,11 +517,11 @@ sparePartsReportsHandler.callbackQuery(/^sp:reports:period:(7|30|90|month)$/, as
   }
 
   try {
-    const transactions = await Database.prisma.iNV_SparePartTransaction.findMany({
+    const transactions = await Database.prisma.iNV_Transaction.findMany({
       where: { createdAt: { gte: fromDate } },
       orderBy: { createdAt: 'desc' },
       take: 100,
-      include: { sparePart: { select: { nameAr: true, code: true } } },
+      include: { item: { select: { nameAr: true, code: true } } },
     })
 
     let message = `📊 **تقرير الحركات منذ ${fromDate.toLocaleDateString('ar-EG')}**\n\n`
@@ -527,7 +530,7 @@ sparePartsReportsHandler.callbackQuery(/^sp:reports:period:(7|30|90|month)$/, as
     }
     else {
       for (const t of transactions.slice(0, 50)) {
-        message += `${t.transactionType} — ${t.sparePart?.nameAr || '-'} — ${t.quantity} — ${t.createdAt.toLocaleDateString('ar-EG')}\n`
+        message += `${t.transactionType} — ${t.item?.nameAr || '-'} — ${t.quantity} — ${t.createdAt.toLocaleDateString('ar-EG')}\n`
       }
     }
 

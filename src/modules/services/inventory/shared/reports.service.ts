@@ -3,111 +3,74 @@ import { Database } from '#root/modules/database/index.js'
 export class ReportsService {
   /**
    * Get low stock items
+   * Note: In the new unified schema, stock quantities are in INV_Stock table
    */
   static async getLowStockItems(
     warehouse: 'oils-greases' | 'spare-parts',
     threshold?: number
   ) {
-    if (warehouse === 'oils-greases') {
-      return await Database.prisma.iNV_OilsGreasesItem.findMany({
-        where: {
-          isActive: true,
-          quantity: {
-            lte: threshold || Database.prisma.iNV_OilsGreasesItem.fields.minQuantity,
+    // Get items with stocks below threshold
+    const items = await Database.prisma.iNV_Item.findMany({
+      where: {
+        isActive: true,
+        stocks: {
+          some: {
+            quantity: {
+              lte: threshold || 10, // Default threshold
+            },
           },
         },
-        include: { category: true, location: true },
-        orderBy: { quantity: 'asc' },
-      })
-    } else {
-      return await Database.prisma.iNV_SparePart.findMany({
-        where: {
-          isActive: true,
-          quantity: {
-            lte: threshold || Database.prisma.iNV_SparePart.fields.minQuantity,
-          },
-        },
-        include: { category: true, location: true },
-        orderBy: { quantity: 'asc' },
-      })
-    }
+      },
+      include: { category: true, stocks: { include: { location: true } } },
+      orderBy: { nameAr: 'asc' },
+    })
+
+    return items
   }
 
   /**
    * Get out of stock items
    */
   static async getOutOfStockItems(warehouse: 'oils-greases' | 'spare-parts') {
-    if (warehouse === 'oils-greases') {
-      return await Database.prisma.iNV_OilsGreasesItem.findMany({
-        where: {
-          isActive: true,
-          quantity: 0,
+    const items = await Database.prisma.iNV_Item.findMany({
+      where: {
+        isActive: true,
+        stocks: {
+          every: {
+            quantity: 0,
+          },
         },
-        include: { category: true, location: true },
-      })
-    } else {
-      return await Database.prisma.iNV_SparePart.findMany({
-        where: {
-          isActive: true,
-          quantity: 0,
-        },
-        include: { category: true, location: true },
-      })
-    }
+      },
+      include: { category: true, stocks: { include: { location: true } } },
+    })
+
+    return items
   }
 
   /**
    * Get inventory summary
    */
   static async getInventorySummary(warehouse: 'oils-greases' | 'spare-parts') {
-    if (warehouse === 'oils-greases') {
-      const [totalItems, totalValue, lowStock, outOfStock] = await Promise.all([
-        Database.prisma.iNV_OilsGreasesItem.count({ where: { isActive: true } }),
-        Database.prisma.iNV_OilsGreasesItem.aggregate({
-          where: { isActive: true },
-          _sum: { totalValue: true },
-        }),
-        Database.prisma.iNV_OilsGreasesItem.count({
-          where: {
-            isActive: true,
-            quantity: { lte: Database.prisma.iNV_OilsGreasesItem.fields.minQuantity },
-          },
-        }),
-        Database.prisma.iNV_OilsGreasesItem.count({
-          where: { isActive: true, quantity: 0 },
-        }),
-      ])
+    const [totalItems, stocks] = await Promise.all([
+      Database.prisma.iNV_Item.count({ where: { isActive: true } }),
+      Database.prisma.iNV_Stock.findMany({
+        include: { item: true },
+      }),
+    ])
 
-      return {
-        totalItems,
-        totalValue: totalValue._sum.totalValue || 0,
-        lowStock,
-        outOfStock,
-      }
-    } else {
-      const [totalItems, totalValue, lowStock, outOfStock] = await Promise.all([
-        Database.prisma.iNV_SparePart.count({ where: { isActive: true } }),
-        Database.prisma.iNV_SparePart.aggregate({
-          where: { isActive: true },
-          _sum: { totalValue: true },
-        }),
-        Database.prisma.iNV_SparePart.count({
-          where: {
-            isActive: true,
-            quantity: { lte: Database.prisma.iNV_SparePart.fields.minQuantity },
-          },
-        }),
-        Database.prisma.iNV_SparePart.count({
-          where: { isActive: true, quantity: 0 },
-        }),
-      ])
+    // Calculate totals from stocks
+    const totalValue = stocks.reduce((sum, stock) => {
+      return sum + (stock.item?.unitPrice ? stock.item.unitPrice * stock.quantity : 0)
+    }, 0)
 
-      return {
-        totalItems,
-        totalValue: totalValue._sum.totalValue || 0,
-        lowStock,
-        outOfStock,
-      }
+    const lowStock = stocks.filter((s) => s.quantity <= (s.item?.minQuantity || 10)).length
+    const outOfStock = stocks.filter((s) => s.quantity === 0).length
+
+    return {
+      totalItems,
+      totalValue,
+      lowStock,
+      outOfStock,
     }
   }
 
@@ -115,81 +78,50 @@ export class ReportsService {
    * Get value by category
    */
   static async getValueByCategory(warehouse: 'oils-greases' | 'spare-parts') {
-    if (warehouse === 'oils-greases') {
-      const items = await Database.prisma.iNV_OilsGreasesItem.findMany({
-        where: { isActive: true },
-        include: { category: true },
-      })
+    const items = await Database.prisma.iNV_Item.findMany({
+      where: { isActive: true },
+      include: { category: true, stocks: true },
+    })
 
-      const categoryMap = new Map<string, { name: string; value: number; count: number }>()
+    const categoryMap = new Map<string, { name: string; value: number; count: number }>()
 
-      for (const item of items) {
-        const categoryName = item.category?.nameAr || 'غير مصنف'
-        const existing = categoryMap.get(categoryName) || { name: categoryName, value: 0, count: 0 }
-        existing.value += item.totalValue
-        existing.count += 1
-        categoryMap.set(categoryName, existing)
-      }
-
-      return Array.from(categoryMap.values())
-    } else {
-      const items = await Database.prisma.iNV_SparePart.findMany({
-        where: { isActive: true },
-        include: { category: true },
-      })
-
-      const categoryMap = new Map<string, { name: string; value: number; count: number }>()
-
-      for (const item of items) {
-        const categoryName = item.category?.nameAr || 'غير مصنف'
-        const existing = categoryMap.get(categoryName) || { name: categoryName, value: 0, count: 0 }
-        existing.value += item.totalValue
-        existing.count += 1
-        categoryMap.set(categoryName, existing)
-      }
-
-      return Array.from(categoryMap.values())
+    for (const item of items) {
+      const categoryName = item.category?.nameAr || 'غير مصنف'
+      const existing = categoryMap.get(categoryName) || { name: categoryName, value: 0, count: 0 }
+      
+      // Calculate value from all stocks
+      const itemValue = item.stocks.reduce((sum, stock) => {
+        return sum + (item.unitPrice ? item.unitPrice * stock.quantity : 0)
+      }, 0)
+      
+      existing.value += itemValue
+      existing.count += 1
+      categoryMap.set(categoryName, existing)
     }
+
+    return Array.from(categoryMap.values())
   }
 
   /**
    * Get value by location
    */
   static async getValueByLocation(warehouse: 'oils-greases' | 'spare-parts') {
-    if (warehouse === 'oils-greases') {
-      const items = await Database.prisma.iNV_OilsGreasesItem.findMany({
-        where: { isActive: true },
-        include: { location: true },
-      })
+    const stocks = await Database.prisma.iNV_Stock.findMany({
+      include: { item: true, location: true },
+    })
 
-      const locationMap = new Map<string, { name: string; value: number; count: number }>()
+    const locationMap = new Map<string, { name: string; value: number; count: number }>()
 
-      for (const item of items) {
-        const locationName = item.location?.nameAr || 'غير محدد'
-        const existing = locationMap.get(locationName) || { name: locationName, value: 0, count: 0 }
-        existing.value += item.totalValue
-        existing.count += 1
-        locationMap.set(locationName, existing)
-      }
-
-      return Array.from(locationMap.values())
-    } else {
-      const items = await Database.prisma.iNV_SparePart.findMany({
-        where: { isActive: true },
-        include: { location: true },
-      })
-
-      const locationMap = new Map<string, { name: string; value: number; count: number }>()
-
-      for (const item of items) {
-        const locationName = item.location?.nameAr || 'غير محدد'
-        const existing = locationMap.get(locationName) || { name: locationName, value: 0, count: 0 }
-        existing.value += item.totalValue
-        existing.count += 1
-        locationMap.set(locationName, existing)
-      }
-
-      return Array.from(locationMap.values())
+    for (const stock of stocks) {
+      const locationName = stock.location?.nameAr || 'غير محدد'
+      const existing = locationMap.get(locationName) || { name: locationName, value: 0, count: 0 }
+      
+      const itemValue = stock.item?.unitPrice ? stock.item.unitPrice * stock.quantity : 0
+      existing.value += itemValue
+      existing.count += 1
+      locationMap.set(locationName, existing)
     }
+
+    return Array.from(locationMap.values())
   }
 }

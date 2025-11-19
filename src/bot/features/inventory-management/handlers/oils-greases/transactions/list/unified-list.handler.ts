@@ -124,50 +124,51 @@ async function getTransactions(type: string, skip: number, limit: number) {
   const transactions: any[] = []
 
   if (type === 'all' || type === 'purchase') {
-    const purchases = await Database.prisma.iNV_OilsGreasesPurchase.findMany({
+    const purchases = await Database.prisma.iNV_Transaction.findMany({
       include: { item: true },
       orderBy: { createdAt: 'desc' },
       skip: type === 'purchase' ? skip : 0,
       take: type === 'purchase' ? limit : undefined,
     })
 
-    transactions.push(...purchases.map(p => ({
+    transactions.push(...purchases.map((p: any) => ({
       type: 'purchase',
       icon: '🛒',
       typeLabel: 'شراء',
-      number: p.purchaseNumber,
-      date: p.purchaseDate,
-      amount: p.totalCost,
+      number: p.transactionNumber,
+      date: p.transactionDate,
+      amount: (p.unitPrice * p.quantity),
       quantity: p.quantity,
       unit: p.item?.unit || '',
       itemName: p.item?.nameAr || 'غير محدد',
-      details: `📍 ${p.supplierName || 'غير محدد'}`,
+      details: `📍 ${p.item?.supplierName || 'غير محدد'}`,
     })))
   }
 
   if (type === 'all' || type === 'issue') {
-    const issues = await Database.prisma.iNV_OilsGreasesIssuance.findMany({
-      include: { item: true, employee: true, equipment: true },
-      orderBy: { createdAt: 'desc' },
+    const issues = await Database.prisma.iNV_Transaction.findMany({
+      where: { transactionType: 'ISSUANCE' },
+      include: { item: true, recipientEmployee: true, equipment: true },
+      orderBy: { transactionDate: 'desc' },
       skip: type === 'issue' ? skip : 0,
       take: type === 'issue' ? limit : undefined,
     })
 
-    transactions.push(...issues.map(i => ({
+    transactions.push(...issues.map((i: any) => ({
       type: 'issue',
       icon: '📤',
       typeLabel: 'صرف',
-      number: i.issuanceNumber,
-      date: i.issuanceDate,
+      number: i.transactionNumber,
+      date: i.transactionDate,
       quantity: i.quantity,
       unit: i.item?.unit || '',
       itemName: i.item?.nameAr || 'غير محدد',
-      details: `👤 ${i.employee?.fullName || 'غير محدد'} | 🚗 ${i.equipment?.nameAr || 'غير محدد'}`,
+      details: `👤 ${i.recipientEmployee?.fullName || 'غير محدد'}${i.equipment ? ` | 🚗 ${i.equipment.nameAr}` : ''}`,
     })))
   }
 
   if (type === 'all' || type === 'transfer') {
-    const transfers = await Database.prisma.iNV_OilsGreasesTransfer.findMany({
+    const transfers = await Database.prisma.iNV_Transaction.findMany({
       orderBy: { createdAt: 'desc' },
       skip: type === 'transfer' ? skip : 0,
       take: type === 'transfer' ? limit : undefined,
@@ -187,7 +188,7 @@ async function getTransactions(type: string, skip: number, limit: number) {
   }
 
   if (type === 'all' || type === 'return') {
-    const returns = await Database.prisma.iNV_OilsGreasesReturn.findMany({
+    const returns = await Database.prisma.iNV_Transaction.findMany({
       orderBy: { createdAt: 'desc' },
       skip: type === 'return' ? skip : 0,
       take: type === 'return' ? limit : undefined,
@@ -207,7 +208,7 @@ async function getTransactions(type: string, skip: number, limit: number) {
   }
 
   if (type === 'all' || type === 'adjust') {
-    const adjustments = await Database.prisma.iNV_OilsGreasesAdjustment.findMany({
+    const adjustments = await Database.prisma.iNV_Transaction.findMany({
       orderBy: { createdAt: 'desc' },
       skip: type === 'adjust' ? skip : 0,
       take: type === 'adjust' ? limit : undefined,
@@ -238,30 +239,30 @@ async function getTransactions(type: string, skip: number, limit: number) {
 async function getTransactionsCount(type: string): Promise<number> {
   if (type === 'all') {
     const [purchases, issues, transfers, returns, adjustments] = await Promise.all([
-      Database.prisma.iNV_OilsGreasesPurchase.count(),
-      Database.prisma.iNV_OilsGreasesIssuance.count(),
-      Database.prisma.iNV_OilsGreasesTransfer.count(),
-      Database.prisma.iNV_OilsGreasesReturn.count(),
-      Database.prisma.iNV_OilsGreasesAdjustment.count(),
+      Database.prisma.iNV_Transaction.count(),
+      Database.prisma.iNV_Transaction.count(),
+      Database.prisma.iNV_Transaction.count(),
+      Database.prisma.iNV_Transaction.count(),
+      Database.prisma.iNV_Transaction.count(),
     ])
     return purchases + issues + transfers + returns + adjustments
   }
 
-  if (type === 'purchase') return Database.prisma.iNV_OilsGreasesPurchase.count()
-  if (type === 'issue') return Database.prisma.iNV_OilsGreasesIssuance.count()
-  if (type === 'transfer') return Database.prisma.iNV_OilsGreasesTransfer.count()
-  if (type === 'return') return Database.prisma.iNV_OilsGreasesReturn.count()
-  if (type === 'adjust') return Database.prisma.iNV_OilsGreasesAdjustment.count()
+  if (type === 'purchase') return Database.prisma.iNV_Transaction.count()
+  if (type === 'issue') return Database.prisma.iNV_Transaction.count()
+  if (type === 'transfer') return Database.prisma.iNV_Transaction.count()
+  if (type === 'return') return Database.prisma.iNV_Transaction.count()
+  if (type === 'adjust') return Database.prisma.iNV_Transaction.count()
   return 0
 }
 
 async function getTypeCounts() {
   const [purchase, issue, transfer, returnCount, adjust] = await Promise.all([
-    Database.prisma.iNV_OilsGreasesPurchase.count(),
-    Database.prisma.iNV_OilsGreasesIssuance.count(),
-    Database.prisma.iNV_OilsGreasesTransfer.count(),
-    Database.prisma.iNV_OilsGreasesReturn.count(),
-    Database.prisma.iNV_OilsGreasesAdjustment.count(),
+    Database.prisma.iNV_Transaction.count(),
+    Database.prisma.iNV_Transaction.count(),
+    Database.prisma.iNV_Transaction.count(),
+    Database.prisma.iNV_Transaction.count(),
+    Database.prisma.iNV_Transaction.count(),
   ])
 
   return {

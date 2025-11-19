@@ -11,20 +11,20 @@ export async function seedInventoryDefaults() {
     // 🏷️ إنشاء التصنيفات الافتراضية
     // ═══════════════════════════════════════════════════════
     const defaultCategories = [
-      { code: 'CAR', nameAr: 'سيارات', nameEn: 'Cars', icon: '🚗', orderIndex: 1 },
-      { code: 'LOADER', nameAr: 'لوادر', nameEn: 'Loaders', icon: '🚜', orderIndex: 2 },
-      { code: 'BULLDOZER', nameAr: 'بلدوزر', nameEn: 'Bulldozers', icon: '🔶', orderIndex: 3 },
-      { code: 'EXCAVATOR', nameAr: 'حفارات', nameEn: 'Excavators', icon: '🏗️', orderIndex: 4 },
-      { code: 'GENERAL', nameAr: 'عام', nameEn: 'General', icon: '🔧', orderIndex: 5 },
+      { code: 'CAR', nameAr: 'سيارات', nameEn: 'Cars', icon: '🚗', prefix: 'CAR', orderIndex: 1 },
+      { code: 'LOADER', nameAr: 'لوادر', nameEn: 'Loaders', icon: '🚜', prefix: 'LDR', orderIndex: 2 },
+      { code: 'BULLDOZER', nameAr: 'بلدوزر', nameEn: 'Bulldozers', icon: '🔶', prefix: 'BUL', orderIndex: 3 },
+      { code: 'EXCAVATOR', nameAr: 'حفارات', nameEn: 'Excavators', icon: '🏗️', prefix: 'EXC', orderIndex: 4 },
+      { code: 'GENERAL', nameAr: 'عام', nameEn: 'General', icon: '🔧', prefix: 'GEN', orderIndex: 5 },
     ]
 
     for (const cat of defaultCategories) {
-      const existing = await Database.prisma.iNV_EquipmentCategory.findUnique({
+      const existing = await Database.prisma.iNV_Category.findUnique({
         where: { code: cat.code },
       })
 
       if (!existing) {
-        await Database.prisma.iNV_EquipmentCategory.create({
+        await Database.prisma.iNV_Category.create({
           data: {
             ...cat,
             isActive: true,
@@ -102,7 +102,7 @@ export async function seedOilsGreasesCategories() {
         nameEn: 'Engine Oil',
         prefix: 'ENG',
         description: 'زيوت المحركات بجميع أنواعها ودرجات اللزوجة',
-        displayOrder: 1,
+        orderIndex: 1,
       },
       {
         code: 'GREASE',
@@ -110,7 +110,7 @@ export async function seedOilsGreasesCategories() {
         nameEn: 'Grease',
         prefix: 'GRS',
         description: 'الشحوم الصناعية للتشحيم',
-        displayOrder: 2,
+        orderIndex: 2,
       },
       {
         code: 'HYDRAULIC-OIL',
@@ -118,7 +118,7 @@ export async function seedOilsGreasesCategories() {
         nameEn: 'Hydraulic Oil',
         prefix: 'HYD',
         description: 'زيوت الهيدروليك للمعدات الثقيلة',
-        displayOrder: 3,
+        orderIndex: 3,
       },
       {
         code: 'GEAR-OIL',
@@ -126,7 +126,7 @@ export async function seedOilsGreasesCategories() {
         nameEn: 'Gear Oil',
         prefix: 'GER',
         description: 'زيوت علب التروس والجير',
-        displayOrder: 4,
+        orderIndex: 4,
       },
       {
         code: 'TRANSMISSION-OIL',
@@ -134,7 +134,7 @@ export async function seedOilsGreasesCategories() {
         nameEn: 'Transmission Oil',
         prefix: 'TRN',
         description: 'زيوت ناقل الحركة (ATF)',
-        displayOrder: 5,
+        orderIndex: 5,
       },
       {
         code: 'BRAKE-FLUID',
@@ -142,7 +142,7 @@ export async function seedOilsGreasesCategories() {
         nameEn: 'Brake Fluid',
         prefix: 'BRK',
         description: 'سوائل الفرامل',
-        displayOrder: 6,
+        orderIndex: 6,
       },
       {
         code: 'COOLANT',
@@ -150,7 +150,7 @@ export async function seedOilsGreasesCategories() {
         nameEn: 'Coolant',
         prefix: 'COL',
         description: 'سوائل التبريد (مياه رديتر)',
-        displayOrder: 7,
+        orderIndex: 7,
       },
       {
         code: 'OTHER',
@@ -158,17 +158,17 @@ export async function seedOilsGreasesCategories() {
         nameEn: 'Other',
         prefix: 'OTH',
         description: 'زيوت وشحوم أخرى',
-        displayOrder: 99,
+        orderIndex: 99,
       },
     ]
 
     for (const cat of defaultCategories) {
-      const existing = await Database.prisma.iNV_OilsGreasesCategory.findUnique({
+      const existing = await Database.prisma.iNV_Category.findUnique({
         where: { code: cat.code },
       })
 
       if (!existing) {
-        await Database.prisma.iNV_OilsGreasesCategory.create({
+        await Database.prisma.iNV_Category.create({
           data: {
             ...cat,
             isActive: true,

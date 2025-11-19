@@ -3,6 +3,7 @@ import { TransactionNumberService } from '../shared/index.js'
 
 export interface IssueData {
   itemId: number
+  locationId: number
   quantity: number
   recipientId?: number
   notes?: string
@@ -12,6 +13,7 @@ export interface IssueData {
 export class OilsGreasesIssueService {
   /**
    * Execute issue transaction
+   * Note: In unified schema, we update INV_Stock and create INV_Transaction
    */
   static async executeIssue(data: IssueData) {
     // Validation
@@ -21,7 +23,7 @@ export class OilsGreasesIssueService {
 
     return await Database.prisma.$transaction(async tx => {
       // Check availability
-      const item = await tx.iNV_OilsGreasesItem.findUnique({
+      const item = await tx.iNV_Item.findUnique({
         where: { id: data.itemId }
       })
 
@@ -29,15 +31,20 @@ export class OilsGreasesIssueService {
         throw new Error('❌ الصنف غير موجود')
       }
 
-      if (item.quantity < data.quantity) {
+      // Check stock at location
+      const stock = await tx.iNV_Stock.findFirst({
+        where: { itemId: data.itemId, locationId: data.locationId }
+      })
+
+      if (!stock || stock.quantity < data.quantity) {
         throw new Error(
-          `❌ الكمية غير كافية\n\n📦 الصنف: ${item.nameAr}\n📊 المتوفر: ${item.quantity} ${item.unit}\n📈 المطلوب: ${data.quantity} ${item.unit}`
+          `❌ الكمية غير كافية\n\n📦 الصنف: ${item.nameAr}\n📊 المتوفر: ${stock?.quantity || 0} ${item.unit}\n📈 المطلوب: ${data.quantity} ${item.unit}`
         )
       }
 
-      // Update item quantity
-      const updatedItem = await tx.iNV_OilsGreasesItem.update({
-        where: { id: data.itemId },
+      // Update stock quantity
+      const updatedStock = await tx.iNV_Stock.update({
+        where: { id: stock.id },
         data: { quantity: { decrement: data.quantity } }
       })
 
@@ -47,19 +54,21 @@ export class OilsGreasesIssueService {
         'issue'
       )
 
-      // Create transaction record
-      const transaction = await tx.iNV_OilsGreasesIssuance.create({
+      // Create unified transaction record
+      const transaction = await tx.iNV_Transaction.create({
         data: {
-          issuanceNumber: transactionNumber,
+          transactionNumber,
+          transactionType: 'ISSUANCE',
           itemId: data.itemId,
+          locationId: data.locationId,
           quantity: data.quantity,
-          issuedToEmployeeId: data.recipientId,
+          recipientEmployeeId: data.recipientId,
           notes: data.notes,
           createdBy: BigInt(data.userId)
         }
       })
 
-      return { transaction, item: updatedItem }
+      return { transaction, stock: updatedStock }
     })
   }
 }
